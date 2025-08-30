@@ -1,0 +1,5 @@
+-- Placeholder for structure_stress.ogg
+-- This should be a structural stress/creaking sound effect
+-- Recommended: High-frequency creaking and groaning sounds
+-- Format: OGG Vorbis, 44.1kHz, Stereo
+-- Duration: 0.5-1 second (loopable)

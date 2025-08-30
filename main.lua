@@ -49,6 +49,44 @@ local switches = {
 	hardmetal = 6
 }
 
+-- Enhanced IBSIT v2.0 material damage multipliers
+local materialMultipliers = {
+	foliage = 2.0,
+	glass = 1.5,
+	ice = 1.3,
+	wood = 1.0,
+	dirt = 0.8,
+	masonry = 0.6,
+	plaster = 0.7,
+	hardmasonry = 0.4,
+	plastic = 1.2,
+	metal = 0.5,
+	hardmetal = 0.3
+}
+
+-- Enhanced IBSIT variables
+local ibsit_triggered = false
+local ibsit_vel, ibsit_pos, ibsit_time, ibsit_breaklist, ibsit_gcl = {}, {}, {}, {}, {}
+local ibsit_ind = nil
+local ibsit_cached_breaksize, ibsit_cached_breakpoint, ibsit_last_frame
+local ibsit_performanceStats = {bodies_processed = 0, holes_created = 0, particles_spawned = 0}
+
+-- Gravity collapse variables
+local ibsit_gravityCollapse = ibsit_gravity_collapse
+local ibsit_collapseThreshold = ibsit_collapse_threshold
+local ibsit_gravityForce = ibsit_gravity_force
+local ibsit_structuralIntegrity = {} -- Track integrity per body
+
+-- Debris cleanup variables
+local ibsit_debrisCleanup = ibsit_debris_cleanup
+local ibsit_cleanupDelay = ibsit_cleanup_delay
+local ibsit_fpsOptimization = ibsit_fps_optimization
+local ibsit_targetFPS = ibsit_target_fps
+local ibsit_performanceScale = ibsit_performance_scale
+local ibsit_debrisTimers = {} -- Track cleanup timers
+local ibsit_lastFrameTime = 0
+local ibsit_currentFPS = 60
+
 -- Registry key prefixes to avoid conflicts
 SetBool("savegame.mod.combined.launch", true)
 
@@ -116,12 +154,34 @@ local xplo_MaxMass = GetInt("savegame.mod.combined.xplo_MaxMass")
 local xplo_MinSpd = GetFloat("savegame.mod.combined.xplo_MinSpd")
 local xplo_MaxSpd = GetFloat("savegame.mod.combined.xplo_MaxSpd")
 
--- IBSIT Settings
+-- IBSIT Settings (Enhanced v2.0)
 local ibsit_momentum = GetInt("savegame.mod.combined.ibsit_momentum")
 local ibsit_dust_amt = GetInt("savegame.mod.combined.ibsit_dust_amt")
 local ibsit_wood_size = GetInt("savegame.mod.combined.ibsit_wood_size")
 local ibsit_stone_size = GetInt("savegame.mod.combined.ibsit_stone_size")
 local ibsit_metal_size = GetInt("savegame.mod.combined.ibsit_metal_size")
+
+-- Enhanced IBSIT v2.0 features
+local ibsit_haptic = GetBool("savegame.mod.combined.ibsit_haptic")
+local ibsit_sounds = GetBool("savegame.mod.combined.ibsit_sounds")
+local ibsit_particles = GetBool("savegame.mod.combined.ibsit_particles")
+local ibsit_vehicle = GetBool("savegame.mod.combined.ibsit_vehicle")
+local ibsit_joint = GetBool("savegame.mod.combined.ibsit_joint")
+local ibsit_protection = GetBool("savegame.mod.combined.ibsit_protection")
+local ibsit_volume = GetFloat("savegame.mod.combined.ibsit_volume")
+local ibsit_particle_quality = GetInt("savegame.mod.combined.ibsit_particle_quality")
+
+-- Gravity collapse features
+local ibsit_gravity_collapse = GetBool("savegame.mod.combined.ibsit_gravity_collapse")
+local ibsit_collapse_threshold = GetFloat("savegame.mod.combined.ibsit_collapse_threshold")
+local ibsit_gravity_force = GetFloat("savegame.mod.combined.ibsit_gravity_force")
+
+-- Debris cleanup features
+local ibsit_debris_cleanup = GetBool("savegame.mod.combined.ibsit_debris_cleanup")
+local ibsit_cleanup_delay = GetFloat("savegame.mod.combined.ibsit_cleanup_delay")
+local ibsit_fps_optimization = GetBool("savegame.mod.combined.ibsit_fps_optimization")
+local ibsit_target_fps = GetInt("savegame.mod.combined.ibsit_target_fps")
+local ibsit_performance_scale = GetFloat("savegame.mod.combined.ibsit_performance_scale")
 
 -- MBCS Settings
 local mbcs_mass = GetInt("savegame.mod.combined.mbcs_mass")
@@ -169,13 +229,23 @@ local hole_breaktime = crum_BreakTime
 local boom_control = xplo_HoleControl
 local boom_breaktime = xplo_BreakTime
 
--- IBSIT calculated values
+-- IBSIT calculated values (Enhanced v2.0)
 local wb_ibsit, mb_ibsit, hb_ibsit = ibsit_wood_size / 100, ibsit_stone_size / 100, ibsit_metal_size / 100
 local threshold_ibsit = 2 ^ ibsit_momentum
 local rthreshold_ibsit = 5 / threshold_ibsit
 local dust_ibsit = 4096 / ibsit_dust_amt
 local rdust_ibsit = 1 / dust_ibsit
 local fdust_ibsit = ibsit_dust_amt
+
+-- Enhanced IBSIT calculated values
+local ibsit_vehicle_enabled = not ibsit_vehicle
+local ibsit_joint_enabled = not ibsit_joint
+local ibsit_protect_enabled = not ibsit_protection
+local ibsit_haptic_enabled = ibsit_haptic
+local ibsit_sounds_enabled = ibsit_sounds
+local ibsit_particles_enabled = ibsit_particles
+local ibsit_volume_level = ibsit_volume
+local ibsit_particleQuality = ibsit_particle_quality
 
 -- MBCS calculated values
 local wb_mbcs, mb_mbcs, hb_mbcs = mbcs_wood_size / 100, mbcs_stone_size / 100, mbcs_metal_size / 100
@@ -471,6 +541,240 @@ local function breaks_ibsit(body, c, s, a)
 	end
 end
 
+-- Enhanced IBSIT v2.0 Functions
+
+-- Calculate structural integrity percentage
+local function calculateStructuralIntegrity_ibsit(body)
+    if not IsHandleValid(body) then return 0 end
+
+    local originalVoxelCount = GetBodyVoxelCount(body)
+    local currentVoxelCount = 0
+
+    -- Count remaining voxels in all shapes
+    local shapes = GetBodyShapes(body)
+    for i = 1, #shapes do
+        currentVoxelCount = currentVoxelCount + GetShapeVoxelCount(shapes[i])
+    end
+
+    -- Store original count if not already stored
+    if not ibsit_structuralIntegrity[body] then
+        ibsit_structuralIntegrity[body] = {original = originalVoxelCount, current = currentVoxelCount}
+    else
+        ibsit_structuralIntegrity[body].current = currentVoxelCount
+    end
+
+    local integrity = currentVoxelCount / ibsit_structuralIntegrity[body].original
+    return math.max(0, math.min(1, integrity)) -- Clamp between 0 and 1
+end
+
+-- Apply gravity collapse forces
+local function applyGravityCollapse_ibsit(body, integrity)
+    if not ibsit_gravityCollapse or integrity > ibsit_collapseThreshold then return end
+
+    local collapseSeverity = (ibsit_collapseThreshold - integrity) / ibsit_collapseThreshold
+    local force = VecScale({0, -1, 0}, ibsit_gravityForce * collapseSeverity * 1000)
+
+    -- Apply force at multiple points for realistic collapse
+    local bounds = GetBodyBounds(body)
+    local center = GetBodyCenterOfMass(body)
+
+    -- Apply force at center and corners for structural failure simulation
+    ApplyBodyImpulse(body, center, force)
+
+    -- Additional forces at structural weak points
+    local corners = {
+        {bounds[1], bounds[2], bounds[3]},
+        {bounds[4], bounds[2], bounds[3]},
+        {bounds[1], bounds[5], bounds[3]},
+        {bounds[4], bounds[5], bounds[3]}
+    }
+
+    for i = 1, #corners do
+        local cornerForce = VecScale(force, 0.3) -- Reduced force at corners
+        ApplyBodyImpulse(body, corners[i], cornerForce)
+    end
+
+    -- Add cascading damage for severe structural failure
+    if integrity < ibsit_collapseThreshold * 0.5 then
+        SetTag(body, "cascade_damage", "true")
+    end
+end
+
+-- Debris cleanup system
+local function cleanupDebris_ibsit()
+    if not ibsit_debrisCleanup then return end
+
+    local currentTime = GetTime()
+
+    -- Find and tag debris for cleanup
+    local debrisBodies = FindBodies(nil, true)
+    for i = 1, #debrisBodies do
+        local body = debrisBodies[i]
+        if IsHandleValid(body) and not IsBodyActive(body) then
+            if not ibsit_debrisTimers[body] then
+                ibsit_debrisTimers[body] = currentTime
+            elseif currentTime - ibsit_debrisTimers[body] > ibsit_cleanupDelay then
+                -- Mark for removal
+                SetTag(body, "cleanup", "true")
+                ibsit_debrisTimers[body] = nil
+            end
+        end
+    end
+
+    -- Remove marked debris
+    local cleanupBodies = FindBodies("cleanup", true)
+    for i = 1, #cleanupBodies do
+        if IsHandleValid(cleanupBodies[i]) then
+            Delete(cleanupBodies[i])
+        end
+    end
+end
+
+-- FPS-based performance optimization
+local function optimizePerformance_ibsit()
+    if not ibsit_fpsOptimization then return end
+
+    local frameTime = GetTime() - ibsit_lastFrameTime
+    ibsit_currentFPS = 1 / frameTime
+    ibsit_lastFrameTime = GetTime()
+
+    -- Adjust performance scale based on FPS
+    if ibsit_currentFPS < ibsit_targetFPS then
+        ibsit_performanceScale = math.max(0.1, ibsit_performanceScale * 0.95) -- Reduce performance
+    elseif ibsit_currentFPS > ibsit_targetFPS + 5 then
+        ibsit_performanceScale = math.min(1.0, ibsit_performanceScale * 1.02) -- Increase performance
+    end
+
+    -- Apply performance scaling
+    if ibsit_performanceScale < 0.8 then
+        -- Reduce particle effects
+        ibsit_particleQuality = math.max(0, ibsit_particleQuality - 1)
+    elseif ibsit_performanceScale > 0.9 then
+        -- Restore particle effects
+        ibsit_particleQuality = math.min(2, ibsit_particleQuality + 1)
+    end
+end
+
+-- Enhanced particle system with new API features
+local function createEnhancedParticles_ibsit(material, position, velocity, intensity)
+    if not ibsit_particles_enabled then return end
+
+    ParticleReset()
+
+    if material == "metal" or material == "hardmetal" then
+        ParticleType("plain")
+        ParticleColor(1, 0.4, 0.3)
+        ParticleAlpha(1, 0, "easein")
+        ParticleRadius(0.03, 0.08, "easeout")
+        ParticleEmissive(5, 0, "easeout")
+        ParticleGravity(-15)
+        ParticleSticky(0.3)
+        ParticleStretch(0)
+        intensity = intensity * 0.25
+    elseif material == "wood" or material == "foliage" then
+        ParticleType("smoke")
+        ParticleColor(0.4, 0.3, 0.2)
+        ParticleAlpha(0.8, 0, "easein")
+        ParticleRadius(0.1, 0.3, "easeout")
+        ParticleGravity(-0.2)
+        ParticleDrag(0, 1, "easeout")
+        ParticleStretch(1, 0, "easein")
+    else
+        ParticleType("smoke")
+        ParticleColor(0.6, 0.55, 0.5)
+        ParticleAlpha(1, 0, "easein")
+        ParticleRadius(0.1, 0.25, "easeout")
+        ParticleGravity(-0.1)
+        ParticleDrag(0, 1, "easeout")
+        ParticleStretch(1, 0, "easein")
+    end
+
+    -- Quality-based particle count
+    local particleCount = intensity * (ibsit_particleQuality + 1)
+    for i = 1, particleCount do
+        SpawnParticle(
+            VecAdd(position, addrangedVec(0.5)),
+            velocity,
+            random() * 2
+        )
+    end
+
+    ibsit_performanceStats.particles_spawned = ibsit_performanceStats.particles_spawned + particleCount
+end
+
+-- Enhanced sound system
+local function playStructuralSound_ibsit(intensity, material)
+    if not ibsit_sounds_enabled then return end
+
+    local soundType
+    if intensity > 1000 then
+        soundType = "collapse_heavy"
+    elseif intensity > 500 then
+        soundType = "structure_stress"
+    else
+        soundType = "collapse_light"
+    end
+
+    PlaySound("MOD/sounds/" .. soundType .. ".ogg", ibsit_volume_level)
+end
+
+-- Enhanced haptic feedback
+local function triggerHapticFeedback_ibsit(intensity)
+    if not ibsit_haptic_enabled then return end
+
+    if intensity > 1000 then
+        PlayHaptic("MOD/haptic/impact_heavy.xml", 1.0)
+    else
+        PlayHaptic("MOD/haptic/impact_light.xml", 0.7)
+    end
+end
+
+-- Enhanced breaking function with new shape manipulation
+local function enhancedBreaks_ibsit(body, c, s, a)
+    local sr, sg, sb, sa, tc, shape
+    local totalHoles = 0
+
+    for i = sqrt(a), 0, -5 do
+        _, tc = GetBodyClosestPoint(body, tc and addrangedVec(tc, 5.5) or c)
+
+        -- Use new shape material detection
+        shape, sr, sg, sb, sa = GetShapeMaterialAtPosition(GetBodyShapes(body)[1], tc)
+
+        -- Enhanced hole creation with material-specific damage
+        local materialMult = materialMultipliers[shape] or 1.0
+        local holeSize = MakeHole(tc, wb_ibsit * i * materialMult, mb_ibsit * i * materialMult, hb_ibsit * i * materialMult)
+
+        if holeSize > dust_ibsit then
+            local x
+            if holeSize < 4096 then
+                x = holeSize * rdust_ibsit
+            else
+                x = fdust_ibsit
+            end
+
+            -- Enhanced particle effects
+            createEnhancedParticles_ibsit(shape, tc, s, x)
+
+            -- Play appropriate sound
+            playStructuralSound_ibsit(holeSize, shape)
+
+            -- Trigger haptic feedback
+            triggerHapticFeedback_ibsit(holeSize)
+        end
+
+        totalHoles = totalHoles + 1
+        ibsit_performanceStats.holes_created = ibsit_performanceStats.holes_created + 1
+
+        if not IsHandleValid(body) then return end
+        if holeSize < 128 and i > 1.5 then return end
+
+        if i > 5 then
+            co_yield(true)
+            s = GetBodyVelocity(body)
+        end
+    end
+end
+
 -- MBCS: Breaks function
 local function breaks_mbcs(shape, x, n, c)
 	local sr, sg, sb, sa, e, tc
@@ -577,7 +881,7 @@ function init()
 		SetBool("savegame.mod.combined.Tog_MASS", true)
 	end
 
-	-- IBSIT initialization
+	-- IBSIT initialization (Enhanced v2.0)
 	if TOG_IMPACT then
 		local shapes = GetBodyShapes(GetWorldBody())
 		for shape = #shapes, 1, -1 do
@@ -586,6 +890,19 @@ function init()
 				SetTag(shape, "inherittags")
 				SetTag(shape, "parent_shape", shape)
 			end
+		end
+
+		-- Load enhanced sound effects
+		if ibsit_sounds_enabled then
+			LoadSound("MOD/sounds/collapse_heavy.ogg")
+			LoadSound("MOD/sounds/collapse_light.ogg")
+			LoadSound("MOD/sounds/structure_stress.ogg")
+		end
+
+		-- Load haptic effects
+		if ibsit_haptic_enabled then
+			LoadHaptic("MOD/haptic/impact_light.xml")
+			LoadHaptic("MOD/haptic/impact_heavy.xml")
 		end
 	end
 
@@ -719,48 +1036,66 @@ function tick(dt)
 	-- Call main functions
 	callFunctions()
 
-	-- IBSIT processing
+	-- IBSIT processing (Enhanced v2.0)
 	if TOG_IMPACT and not ibsit_triggered then
-		if last_frame then
-			available_breaksize, available_breakpoint, last_frame = cached_breaksize, cached_breakpoint, false
+		if ibsit_last_frame then
+			ibsit_cached_breaksize, ibsit_cached_breakpoint, ibsit_last_frame = ibsit_cached_breaksize, ibsit_cached_breakpoint, false
 		end
 		if HasKey("game.explosion") then
-			cached_breaksize, cached_breakpoint, last_frame = GetFloat("game.explosion.strength") * 2.2, {GetFloat("game.explosion.x"), GetFloat("game.explosion.y"), GetFloat("game.explosion.z")}, true
+			ibsit_cached_breaksize, ibsit_cached_breakpoint, ibsit_last_frame = GetFloat("game.explosion.strength") * 2.2, {GetFloat("game.explosion.x"), GetFloat("game.explosion.y"), GetFloat("game.explosion.z")}, true
 		end
 		if HasKey("game.break") then
 			local breaksize, breakpoint = GetFloat("game.break.size")
-			if available_breaksize then
-				if available_breaksize > breaksize then
-					breaksize, breakpoint = available_breaksize, available_breakpoint
+			if ibsit_cached_breaksize then
+				if ibsit_cached_breaksize > breaksize then
+					breaksize, breakpoint = ibsit_cached_breaksize, ibsit_cached_breakpoint
 				else
 					breakpoint = {GetFloat("game.break.x"), GetFloat("game.break.y"), GetFloat("game.break.z")}
 				end
-				available_breaksize = nil
+				ibsit_cached_breaksize = nil
 			else
 				breakpoint = {GetFloat("game.break.x"), GetFloat("game.break.y"), GetFloat("game.break.z")}
 			end
 
+			-- Enhanced query system
+			if ibsit_vehicle_enabled then
+				local vehList = GetPlayerVehicle()
+				if vehList ~= 0 then
+					vehList = GetVehicleBodies(vehList)
+					for i = #vehList, 1, -1 do
+						QueryRequire("physical dynamic large")
+						vehList[i] = QueryAabbBodies(GetBodyBounds(vehList[i]))
+					end
+					for i = #vehList, 1, -1 do
+						QueryRejectBodies(vehList[i])
+					end
+				end
+				vehList = FindVehicles(nil, true)
+				for i = #vehList, 1, -1 do
+					QueryRejectVehicle(vehList[i])
+				end
+			end
+
+			if ibsit_protect_enabled then QueryRejectBodies(FindBodies("leave_me_alone", true)) end
+
+			-- Update object list with enhanced bounds
 			QueryRequire("physical dynamic large")
-			local bodies = QueryAabbBodies({breakpoint[1] - breaksize, breakpoint[2] - breaksize, breakpoint[3] - breaksize}, {breakpoint[1] + breaksize, breakpoint[2] + breaksize, breakpoint[3] + breaksize})
+			local bodies = QueryAabbBodies(
+				{breakpoint[1] - breaksize, breakpoint[2] - breaksize, breakpoint[3] - breaksize},
+				{breakpoint[1] + breaksize, breakpoint[2] + breaksize, breakpoint[3] + breaksize}
+			)
+
 			for body = #bodies, 1, -1 do
 				body = bodies[body]
-				if not time[body] and IsBodyBroken(body) and IsBodyActive(body) then
+				if not ibsit_time[body] and IsBodyBroken(body) and IsBodyActive(body) then
 					local dist = GetBodyVoxelCount(body)
-					local lp = tonumber(GetTagValue(body, "likely_unbreakable"))
-					if lp then
-						if lp ~= dist then
-							lp = SetTag(body, "likely_unbreakable", dist)
-						end
-					end
-					if not lp then
-						if dist > 1024 or VecLength(GetBodyVelocity(body)) * GetBodyMass(body) > threshold_ibsit then
-							SetTag(body, "spd")
-							dist = log(dist + 1)
-							local tr = GetBodyTransform(body)
-							lp = TransformToParentPoint(tr, breakpoint)
-							dist = VecLength(VecSub(lp, GetBodyCenterOfMass(body))) < dist
-							pos[body], pos[-body], vel[-body], time[body], time[-body], ind_ibsit = lp, dist and tr.pos or breakpoint, dist, true, 1, true
-						end
+					local tr = GetBodyTransform(body)
+					local lp = TransformToLocalPoint(tr, breakpoint)
+					dist = VecLength(VecSub(lp, GetBodyCenterOfMass(body))) < dist
+
+					if dist or VecLength(GetBodyVelocity(body)) * GetBodyMass(body) > threshold_ibsit then
+						SetTag(body, "spd")
+						ibsit_pos[body], ibsit_pos[-body], ibsit_vel[-body], ibsit_time[body], ibsit_time[-body], ibsit_ind = lp, dist and tr.pos or breakpoint, dist, true, 1, true
 					end
 				end
 			end
@@ -987,32 +1322,42 @@ end
 
 -- Update function
 function update()
-	if ind_ibsit then
-		gcl = FindBodies("spd", true)
-		if #gcl == 0 then vel, pos, time, ind_ibsit = {}, {}, {}, false; return end
-		for i = #gcl, 1, -1 do
-			local body = gcl[i]
-			local val = GetTagValue(body, "spd")
-			if val == "uninit" then
-				local val_pos = vel[-body] and GetBodyTransform(body).pos or TransformToParentPoint(GetBodyTransform(body), pos[body])
-				if VecLength(VecSub(val_pos, pos[-body])) > 0.125 then
-					vel[body] = vel[-body] and GetBodyVelocity(body) or GetBodyVelocityAtPos(body, val_pos)
-					SetTag(body, "spd", "calc")
+	if ibsit_ind then
+		ibsit_gcl = FindBodies("spd", true)
+		if #ibsit_gcl == 0 then
+			ibsit_vel, ibsit_pos, ibsit_time, ibsit_ind = {}, {}, {}, false
+			return
+		end
+
+		for i = #ibsit_gcl, 1, -1 do
+			local body = ibsit_gcl[i]
+			if IsHandleValid(body) then
+				local val = GetTagValue(body, "spd")
+				if val == "uninit" then
+					val = ibsit_vel[-body] and GetBodyTransform(body).pos or TransformToParentPoint(GetBodyTransform(body), ibsit_pos[body])
+					if VecLength(VecSub(val, ibsit_pos[-body])) > 0.125 then
+						ibsit_vel[body] = ibsit_vel[-body] and GetBodyVelocity(body) or GetBodyVelocityAtPos(body, val)
+						SetTag(body, "spd", "calc")
+					end
+				elseif val == "" then
+					SetTag(body, "spd", "uninit")
+				elseif val == "gc" then
+					ibsit_vel[body], ibsit_vel[-body], ibsit_time[body], ibsit_time[-body], ibsit_pos[body], ibsit_pos[-body], val = RemoveTag(body, "spd"), nil, nil, nil, nil, nil, #ibsit_gcl
+					ibsit_gcl[i] = ibsit_gcl[val]
+					ibsit_gcl[val] = nil
 				end
-			elseif val == "" then
-				SetTag(body, "spd", "uninit")
-			elseif val == "gc" then
-				vel[body], vel[-body], time[body], time[-body], pos[body], pos[-body], val = RemoveTag(body, "spd"), nil, nil, nil, nil, nil, #gcl
-				gcl[i] = gcl[val]
-				gcl[val] = nil
+			else
+				ibsit_vel[body], ibsit_vel[-body], ibsit_time[body], ibsit_time[-body], ibsit_pos[body], ibsit_pos[-body] = nil, nil, nil, nil, nil, nil
 			end
 		end
-		for co = #breaklist, 1, -1 do
-			local _, ret = coroutine.resume(breaklist[co])
+
+		-- Process coroutines
+		for co = #ibsit_breaklist, 1, -1 do
+			local _, ret = co_resume(ibsit_breaklist[co])
 			if ret ~= true then
-				ret = #breaklist
-				breaklist[co] = breaklist[ret]
-				breaklist[ret] = nil
+				ret = #ibsit_breaklist
+				ibsit_breaklist[co] = ibsit_breaklist[ret]
+				ibsit_breaklist[ret] = nil
 			end
 		end
 	end
@@ -1049,51 +1394,62 @@ end
 
 -- PostUpdate function
 function postUpdate()
-	if ind_ibsit then
-		for body = #gcl, 1, -1 do
-			body = gcl[body]
+	if ibsit_ind then
+		-- Run performance optimization
+		optimizePerformance_ibsit()
+
+		-- Run debris cleanup
+		cleanupDebris_ibsit()
+
+		for body = #ibsit_gcl, 1, -1 do
+			body = ibsit_gcl[body]
 			if IsHandleValid(body) then
 				local val = GetTagValue(body, "spd")
 				if val == "calc" then
 					local c, s
-					if vel[-body] then
+					if ibsit_vel[-body] then
 						c, s = GetBodyTransform(body).pos, GetBodyVelocity(body)
 					else
-						c = TransformToParentPoint(GetBodyTransform(body), pos[body])
+						c = TransformToParentPoint(GetBodyTransform(body), ibsit_pos[body])
 						s = GetBodyVelocityAtPos(body, c)
 					end
+
 					if VecLength(s) < 32 then
-						local a = VecSub(vel[body], s)
-						if VecDot(a, vel[body]) > 0.0678 then
+						local a = VecSub(ibsit_vel[body], s)
+						if VecDot(a, ibsit_vel[body]) > 0.0678 then
 							local sa = GetBodyMass(body)
 							a, val = VecLength(a) * sa, GetBodyVoxelCount(body)
+
 							if sa < val * 0.5 or val * 10 < sa then
 								a = a * 0.015625
 							end
-							if pos[-body] then
-								sa = VecLength(VecSub(c, pos[-body]))
+
+							if ibsit_pos[-body] then
+								sa = VecLength(VecSub(c, ibsit_pos[-body]))
 								if sa < 0.5 then
 									a = a * sa * 2
 								else
-									pos[-body] = nil
+									ibsit_pos[-body] = nil
 								end
 							end
+
 							if a > threshold_ibsit then
-								if vel[-body] then
-									c = TransformToParentPoint(GetBodyTransform(body), pos[body])
+								if ibsit_vel[-body] then
+									c = TransformToParentPoint(GetBodyTransform(body), ibsit_pos[body])
 								end
-								sa = co_create(breaks_ibsit)
+
+								sa = co_create(enhancedBreaks_ibsit)
 								_, val = co_resume(sa, body, c, s, a * rthreshold_ibsit - 4)
 								if val == true then
-									breaklist[#breaklist + 1] = sa
+									ibsit_breaklist[#ibsit_breaklist + 1] = sa
 									val = GetBodyVoxelCount(body)
-									if val > 1024 * time[-body] or VecLength(s) * GetBodyMass(body) > threshold_ibsit * time[-body] then
-										sa = VecLerp(c, rndPnt(GetBodyBounds(body)), math.random())
+									if val > 1024 * ibsit_time[-body] or VecLength(s) * GetBodyMass(body) > threshold_ibsit * ibsit_time[-body] then
+										sa = VecLerp(c, rndPnt(GetBodyBounds(body)), random())
 										val = log(val + 1)
 										c = GetBodyTransform(body)
-										s = TransformToParentPoint(c, sa)
+										s = TransformToLocalPoint(c, sa)
 										val = VecLength(VecSub(s, GetBodyCenterOfMass(body))) < val
-										pos[body], pos[-body], vel[-body], time[body], time[-body] = s, val and c.pos or sa, val, true, time[-body] + 1
+										ibsit_pos[body], ibsit_pos[-body], ibsit_vel[-body], ibsit_time[body], ibsit_time[-body] = s, val and c.pos or sa, val, true, ibsit_time[-body] + 1
 										SetTag(body, "spd", "uninit")
 										sa = nil
 									end
@@ -1102,27 +1458,31 @@ function postUpdate()
 									SetTag(body, "spd", "gc")
 								end
 							else
-								vel[body] = s
+								ibsit_vel[body] = s
 							end
 						else
-							vel[body], time[body] = s, false
+							ibsit_vel[body], ibsit_time[body] = s, false
 						end
 					else
 						SetTag(body, "autobreak")
 						SetTag(body, "spd", "hs")
-						time[body] = true
-						vel[body] = s
+						ibsit_vel[body] = s
 					end
+
+					-- Apply gravity collapse effects
+					local integrity = calculateStructuralIntegrity_ibsit(body)
+					applyGravityCollapse_ibsit(body, integrity)
+
 				elseif val == "hs" then
-					val = vel[-body] and GetBodyVelocity(body) or GetBodyVelocityAtPos(body, TransformToParentPoint(GetBodyTransform(body), pos[body]))
+					val = ibsit_vel[-body] and GetBodyVelocity(body) or GetBodyVelocityAtPos(body, TransformToParentPoint(GetBodyTransform(body), ibsit_pos[body]))
 					if VecLength(val) < 32 then
 						RemoveTag(body, "autobreak")
 						SetTag(body, "spd", "calc")
 					end
-					vel[body] = val
+					ibsit_vel[body] = val
 				end
 			else
-				vel[body], vel[-body], time[body], time[-body], pos[body], pos[-body] = nil, nil, nil, nil, nil, nil
+				ibsit_vel[body], ibsit_vel[-body], ibsit_time[body], ibsit_time[-body], ibsit_pos[body], ibsit_pos[-body] = nil, nil, nil, nil, nil, nil
 			end
 		end
 	end
@@ -1194,7 +1554,7 @@ function DrawOptionsMenu()
     UiFont("regular.ttf", 24)
     UiTranslate(0, 100)
 
-    local pages = {"Main", "FPS&Dust", "Crumble", "Explosions", "Force&Fire", "Advanced"}
+    local pages = {"Main", "FPS&Dust", "Crumble", "Explosions", "Force&Fire", "Advanced", "IBSIT v2.0"}
     local currentPage = GetInt("savegame.mod.combined.options_page") or 1
 
     for i, pageName in ipairs(pages) do
@@ -1234,6 +1594,8 @@ function DrawPageContent(page)
         DrawForceFirePage()
     elseif page == 6 then
         DrawAdvancedPage()
+    elseif page == 7 then
+        DrawIBSITPage()
     end
 end
 
@@ -1469,31 +1831,159 @@ function DrawAdvancedPage()
     end
 end
 
-function ResetAllSettings()
-    -- Reset main toggles
-    SetBool("savegame.mod.combined.Tog_FPSC", false)
-    SetBool("savegame.mod.combined.Tog_DUST", false)
-    SetBool("savegame.mod.combined.Tog_CRUMBLE", true)
-    SetBool("savegame.mod.combined.Tog_RUMBLE", false)
-    SetBool("savegame.mod.combined.Tog_FORCE", false)
-    SetBool("savegame.mod.combined.Tog_FIRE", false)
-    SetBool("savegame.mod.combined.Tog_VIOLENCE", false)
-    SetBool("savegame.mod.combined.Tog_DAMSTAT", false)
-    SetBool("savegame.mod.combined.Tog_JOINTS", false)
-    SetBool("savegame.mod.combined.Tog_IMPACT", true)
-    SetBool("savegame.mod.combined.Tog_MASS", true)
+function DrawIBSITPage()
+    UiTranslate(-250, -150)
 
-    -- Reset key settings to defaults
-    SetInt("savegame.mod.combined.FPS_Targ", 30)
-    SetInt("savegame.mod.combined.dust_amt", 50)
-    SetInt("savegame.mod.combined.dust_size", 100)
-    SetInt("savegame.mod.combined.crum_DMGLight", 50)
-    SetInt("savegame.mod.combined.crum_DMGMed", 50)
-    SetInt("savegame.mod.combined.crum_DMGHeavy", 50)
-    SetInt("savegame.mod.combined.xplo_szBase", 35)
-    SetInt("savegame.mod.combined.xplo_chance", 4)
-    SetInt("savegame.mod.combined.force_strength", 35)
-    SetInt("savegame.mod.combined.fyr_chance", 1)
-    SetInt("savegame.mod.combined.ibsit_momentum", 12)
-    SetInt("savegame.mod.combined.mbcs_mass", 8)
+    -- IBSIT Core Settings
+    UiText("Momentum Threshold:")
+    UiTranslate(180, 0)
+    local momentum = GetInt("savegame.mod.combined.ibsit_momentum")
+    UiText(tostring(momentum))
+    UiTranslate(-180, 30)
+
+    UiText("Dust Amount:")
+    UiTranslate(180, 0)
+    local dust = GetInt("savegame.mod.combined.ibsit_dust_amt")
+    UiText(tostring(dust))
+    UiTranslate(-180, 30)
+
+    -- Material Size Multipliers
+    UiText("Wood Size:")
+    UiTranslate(180, 0)
+    local wood = GetInt("savegame.mod.combined.ibsit_wood_size")
+    UiText(string.format("%.1f", wood/100))
+    UiTranslate(-180, 30)
+
+    UiText("Stone Size:")
+    UiTranslate(180, 0)
+    local stone = GetInt("savegame.mod.combined.ibsit_stone_size")
+    UiText(string.format("%.1f", stone/100))
+    UiTranslate(-180, 30)
+
+    UiText("Metal Size:")
+    UiTranslate(180, 0)
+    local metal = GetInt("savegame.mod.combined.ibsit_metal_size")
+    UiText(string.format("%.1f", metal/100))
+    UiTranslate(-180, 30)
+
+    -- Feature toggles
+    UiTranslate(0, 50)
+    UiText("Enhanced Features:")
+    UiTranslate(0, 30)
+
+    local features = {
+        {"Haptic Feedback", "savegame.mod.combined.ibsit_haptic"},
+        {"Sound Effects", "savegame.mod.combined.ibsit_sounds"},
+        {"Enhanced Particles", "savegame.mod.combined.ibsit_particles"},
+        {"Vehicle Protection", "savegame.mod.combined.ibsit_vehicle"},
+        {"Joint Protection", "savegame.mod.combined.ibsit_joint"},
+        {"Protection Mode", "savegame.mod.combined.ibsit_protection"}
+    }
+
+    for i, feature in ipairs(features) do
+        UiPush()
+        UiTranslate(0, (i-1) * 35)
+
+        local enabled = GetBool(feature[2])
+        if enabled then
+            UiColor(0.5, 1, 0.5)
+        else
+            UiColor(0.7, 0.7, 0.7)
+        end
+
+        if UiTextButton(feature[1] .. " (" .. (enabled and "ON" or "OFF") .. ")", 250, 30) then
+            SetBool(feature[2], not enabled)
+        end
+        UiPop()
+    end
+
+    -- Advanced settings
+    UiTranslate(300, -150)
+    UiText("Advanced Settings:")
+    UiTranslate(0, 30)
+
+    UiText("Particle Quality:")
+    UiTranslate(150, 0)
+    local quality = GetInt("savegame.mod.combined.ibsit_particle_quality")
+    local qualityNames = {"Low", "Medium", "High"}
+    UiText(qualityNames[quality + 1] or "Medium")
+    UiTranslate(-150, 30)
+
+    UiText("Volume:")
+    UiTranslate(150, 0)
+    local volume = GetFloat("savegame.mod.combined.ibsit_volume")
+    UiText(string.format("%.1f", volume))
+    UiTranslate(-150, 30)
+
+    -- Gravity collapse settings
+    UiTranslate(0, 50)
+    UiText("Gravity Collapse:")
+    UiTranslate(0, 30)
+
+    local collapseEnabled = GetBool("savegame.mod.combined.ibsit_gravity_collapse")
+    if collapseEnabled then
+        UiColor(0.5, 1, 0.5)
+    else
+        UiColor(0.7, 0.7, 0.7)
+    end
+    if UiTextButton("Gravity Collapse (" .. (collapseEnabled and "ON" or "OFF") .. ")", 200, 30) then
+        SetBool("savegame.mod.combined.ibsit_gravity_collapse", not collapseEnabled)
+    end
+
+    UiTranslate(0, 40)
+    UiColor(1, 1, 1)
+    UiText("Collapse Threshold:")
+    UiTranslate(150, 0)
+    local threshold = GetFloat("savegame.mod.combined.ibsit_collapse_threshold")
+    UiText(string.format("%.1f", threshold))
+    UiTranslate(-150, 30)
+
+    UiText("Gravity Force:")
+    UiTranslate(150, 0)
+    local force = GetFloat("savegame.mod.combined.ibsit_gravity_force")
+    UiText(string.format("%.1f", force))
+
+    -- Debris cleanup settings
+    UiTranslate(0, 50)
+    UiText("Debris Cleanup:")
+    UiTranslate(0, 30)
+
+    local cleanupEnabled = GetBool("savegame.mod.combined.ibsit_debris_cleanup")
+    if cleanupEnabled then
+        UiColor(0.5, 1, 0.5)
+    else
+        UiColor(0.7, 0.7, 0.7)
+    end
+    if UiTextButton("Auto Cleanup (" .. (cleanupEnabled and "ON" or "OFF") .. ")", 200, 30) then
+        SetBool("savegame.mod.combined.ibsit_debris_cleanup", not cleanupEnabled)
+    end
+
+    UiTranslate(0, 40)
+    UiColor(1, 1, 1)
+    UiText("Cleanup Delay:")
+    UiTranslate(150, 0)
+    local delay = GetFloat("savegame.mod.combined.ibsit_cleanup_delay")
+    UiText(string.format("%.1f", delay) .. "s")
+
+    -- FPS optimization settings
+    UiTranslate(0, 50)
+    UiText("Performance:")
+    UiTranslate(0, 30)
+
+    local fpsEnabled = GetBool("savegame.mod.combined.ibsit_fps_optimization")
+    if fpsEnabled then
+        UiColor(0.5, 1, 0.5)
+    else
+        UiColor(0.7, 0.7, 0.7)
+    end
+    if UiTextButton("FPS Optimization (" .. (fpsEnabled and "ON" or "OFF") .. ")", 200, 30) then
+        SetBool("savegame.mod.combined.ibsit_fps_optimization", not fpsEnabled)
+    end
+
+    UiTranslate(0, 40)
+    UiColor(1, 1, 1)
+    UiText("Target FPS:")
+    UiTranslate(150, 0)
+    local targetFps = GetInt("savegame.mod.combined.ibsit_target_fps")
+    UiText(tostring(targetFps))
 end
