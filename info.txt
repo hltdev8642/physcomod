@@ -1,0 +1,5 @@
+name=Combined Physics Destruction Mod
+author=Combined from PDM, IBSIT, and MBCS
+description=Unified physics destruction mod combining progressive destruction, impact-based integrity testing, and mass-based collateral systems. Features comprehensive FPS management, advanced crumbling mechanics, customizable explosions, force effects, and intelligent debris handling.
+version=1.0
+preview.jpg

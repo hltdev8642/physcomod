@@ -1,0 +1,13 @@
+<!-- Placeholder for impact_heavy.xml
+This should be a heavy impact haptic effect
+Recommended: Strong, longer vibration pattern
+Format: XML haptic definition
+Example structure:
+<haptic>
+    <effect type="rumble">
+        <duration>500</duration>
+        <strength>0.8</strength>
+        <fade-out>100</fade-out>
+    </effect>
+</haptic>
+-->
