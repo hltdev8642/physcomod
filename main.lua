@@ -973,7 +973,10 @@ function draw(dt)
 		UiText("(also use , to show/hide the direction marker)")
 		UiPop()
 	end
+end
 
+-- Menu function for pause menu UI
+function menu()
 	-- Draw options menu if visible
 	if optionsVisible then
 		UiMakeInteractive()
@@ -1241,7 +1244,7 @@ function tick(dt)
 						local metal_breakage = (crum_DMGHeavy * (mass * 0.008))
 
 						if (broken == true or GetInt("savegame.mod.combined.crum_Source") == 1) then
-							if (mass > (crum_MinMass / 8)) and (vector_len > ((crum_MinSpd) / 20))) and vector_len < ((crum_MaxSpd)) then
+							if (mass > (crum_MinMass / 8) and (vector_len > (crum_MinSpd / 20)) and vector_len < (crum_MaxSpd)) then
 								if ((wood_breakage * crum_dist / 500) + (stone_breakage * crum_dist / 500) + (metal_breakage * crum_dist / 500)) > (0.25 * crum_dist) then
 									crumbled_this_tick = crumbled_this_tick + 1
 									MakeHole(GetBodyTransform(body).pos, wood_breakage * crum_dist / 500, stone_breakage * crum_dist / 500, metal_breakage * crum_dist / 500)
@@ -1668,7 +1671,7 @@ function DrawFPSDustPage()
     UiTranslate(-100, 0)
     UiText("FPS:")
     UiTranslate(50, 0)
-    local newFps = math.floor(UiSlider("dot", "x", (fps - 30) / 54, 0, 100) * 54 + 30)
+    local newFps = math.floor(UiSlider("ui/common/dot.png", "x", (fps - 30) / 54, 0, 100) * 54 + 30)
     if newFps ~= fps then
         SetInt("savegame.mod.combined.FPS_Targ", newFps)
     end
@@ -1683,7 +1686,7 @@ function DrawFPSDustPage()
     UiTranslate(-100, 0)
     UiText("Dust:")
     UiTranslate(50, 0)
-    local newDust = math.floor(UiSlider("dot", "x", dust / 200, 0, 100) * 200)
+    local newDust = math.floor(UiSlider("ui/common/dot.png", "x", dust / 200, 0, 100) * 200)
     if newDust ~= dust then
         SetInt("savegame.mod.combined.dust_amt", newDust)
     end
@@ -1714,7 +1717,7 @@ function DrawCrumblePage()
         UiText(tostring(value))
 
         UiTranslate(-150, 20)
-        local newValue = math.floor(UiSlider("dot", "x", value / setting[3], 0, 100) * setting[3])
+        local newValue = math.floor(UiSlider("ui/common/dot.png", "x", value / setting[3], 0, 100) * setting[3])
         if newValue ~= value then
             SetInt(setting[2], newValue)
         end
@@ -1744,7 +1747,7 @@ function DrawExplosionsPage()
         UiText(tostring(value))
 
         UiTranslate(-150, 20)
-        local newValue = math.floor(UiSlider("dot", "x", value / setting[4], 0, 100) * setting[4])
+        local newValue = math.floor(UiSlider("ui/common/dot.png", "x", value / setting[4], 0, 100) * setting[4])
         if newValue ~= value then
             SetInt(setting[2], newValue)
         end
@@ -1786,7 +1789,7 @@ function DrawForceFirePage()
     UiTranslate(-100, 0)
     UiText("Force:")
     UiTranslate(50, 0)
-    local newForce = math.floor(UiSlider("dot", "x", force / 240, 0, 100) * 240)
+    local newForce = math.floor(UiSlider("ui/common/dot.png", "x", force / 240, 0, 100) * 240)
     if newForce ~= force then
         SetInt("savegame.mod.combined.force_strength", newForce)
     end
@@ -1816,7 +1819,7 @@ function DrawAdvancedPage()
         UiText(tostring(value))
 
         UiTranslate(-150, 20)
-        local newValue = math.floor(UiSlider("dot", "x", value / setting[3], 0, 100) * setting[3])
+        local newValue = math.floor(UiSlider("ui/common/dot.png", "x", value / setting[3], 0, 100) * setting[3])
         if newValue ~= value then
             SetInt(setting[2], newValue)
         end
@@ -1897,7 +1900,7 @@ function DrawIBSITPage()
         UiPop()
     end
 
-    -- Advanced settings
+    -- Advanced settings with sliders
     UiTranslate(300, -150)
     UiText("Advanced Settings:")
     UiTranslate(0, 30)
@@ -1909,14 +1912,23 @@ function DrawIBSITPage()
     UiText(qualityNames[quality + 1] or "Medium")
     UiTranslate(-150, 30)
 
+    -- Volume slider
+    UiPush()
+    UiTranslate(-100, 0)
     UiText("Volume:")
-    UiTranslate(150, 0)
+    UiTranslate(50, 0)
     local volume = GetFloat("savegame.mod.combined.ibsit_volume")
-    UiText(string.format("%.1f", volume))
-    UiTranslate(-150, 30)
+    local newVolume = UiSlider("ui/common/dot.png", "x", volume*100, 0, 100)/100
+    if newVolume ~= volume then
+        SetFloat("savegame.mod.combined.ibsit_volume", newVolume)
+    end
+    UiTranslate(60, 0)
+    UiText(string.format("%.1f", newVolume))
+    UiPop()
+
+    UiTranslate(0, 40)
 
     -- Gravity collapse settings
-    UiTranslate(0, 50)
     UiText("Gravity Collapse:")
     UiTranslate(0, 30)
 
@@ -1932,16 +1944,36 @@ function DrawIBSITPage()
 
     UiTranslate(0, 40)
     UiColor(1, 1, 1)
-    UiText("Collapse Threshold:")
-    UiTranslate(150, 0)
-    local threshold = GetFloat("savegame.mod.combined.ibsit_collapse_threshold")
-    UiText(string.format("%.1f", threshold))
-    UiTranslate(-150, 30)
 
+    -- Collapse threshold slider
+    UiPush()
+    UiTranslate(-100, 0)
+    UiText("Collapse Threshold:")
+    UiTranslate(120, 0)
+    local threshold = GetFloat("savegame.mod.combined.ibsit_collapse_threshold")
+    local newThreshold = UiSlider("ui/common/dot.png", "x", threshold*100, 0, 100)/100
+    if newThreshold ~= threshold then
+        SetFloat("savegame.mod.combined.ibsit_collapse_threshold", newThreshold)
+    end
+    UiTranslate(60, 0)
+    UiText(string.format("%.2f", newThreshold))
+    UiPop()
+
+    UiTranslate(0, 40)
+
+    -- Gravity force slider
+    UiPush()
+    UiTranslate(-100, 0)
     UiText("Gravity Force:")
-    UiTranslate(150, 0)
+    UiTranslate(120, 0)
     local force = GetFloat("savegame.mod.combined.ibsit_gravity_force")
-    UiText(string.format("%.1f", force))
+    local newForce = UiSlider("ui/common/dot.png", "x", force*20, 0, 100)/20
+    if newForce ~= force then
+        SetFloat("savegame.mod.combined.ibsit_gravity_force", newForce)
+    end
+    UiTranslate(60, 0)
+    UiText(string.format("%.1f", newForce))
+    UiPop()
 
     -- Debris cleanup settings
     UiTranslate(0, 50)
@@ -1960,10 +1992,20 @@ function DrawIBSITPage()
 
     UiTranslate(0, 40)
     UiColor(1, 1, 1)
+
+    -- Cleanup delay slider
+    UiPush()
+    UiTranslate(-100, 0)
     UiText("Cleanup Delay:")
-    UiTranslate(150, 0)
+    UiTranslate(120, 0)
     local delay = GetFloat("savegame.mod.combined.ibsit_cleanup_delay")
-    UiText(string.format("%.1f", delay) .. "s")
+    local newDelay = UiSlider("ui/common/dot.png", "x", delay, 0, 60)
+    if newDelay ~= delay then
+        SetFloat("savegame.mod.combined.ibsit_cleanup_delay", newDelay)
+    end
+    UiTranslate(60, 0)
+    UiText(string.format("%.1f", newDelay) .. "s")
+    UiPop()
 
     -- FPS optimization settings
     UiTranslate(0, 50)
@@ -1982,8 +2024,18 @@ function DrawIBSITPage()
 
     UiTranslate(0, 40)
     UiColor(1, 1, 1)
+
+    -- Target FPS slider
+    UiPush()
+    UiTranslate(-100, 0)
     UiText("Target FPS:")
-    UiTranslate(150, 0)
+    UiTranslate(120, 0)
     local targetFps = GetInt("savegame.mod.combined.ibsit_target_fps")
-    UiText(tostring(targetFps))
+    local newTargetFps = math.floor(UiSlider("ui/common/dot.png", "x", (targetFps - 15), 0, 45) + 15)
+    if newTargetFps ~= targetFps then
+        SetInt("savegame.mod.combined.ibsit_target_fps", newTargetFps)
+    end
+    UiTranslate(60, 0)
+    UiText(tostring(newTargetFps))
+    UiPop()
 end

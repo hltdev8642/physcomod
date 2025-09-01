@@ -1,3 +1,0 @@
-name = Progressive Destruction Mod
-author = Bitcoin Baron
-description = Makes your computer cry but boy it feels so good.

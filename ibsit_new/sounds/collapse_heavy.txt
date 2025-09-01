@@ -1,5 +1,0 @@
--- Placeholder for collapse_heavy.ogg
--- This should be a heavy structural collapse sound effect
--- Recommended: Low-frequency rumble with debris impact sounds
--- Format: OGG Vorbis, 44.1kHz, Stereo
--- Duration: 2-3 seconds

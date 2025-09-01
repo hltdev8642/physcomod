@@ -1,4 +1,0 @@
-name = Impact Based Structural Integrity Test v2.0
-author = Litttle_fish (Enhanced)
-description = Advanced structural integrity simulation with enhanced visuals, sounds, and performance. Features realistic collapse mechanics, particle effects, and haptic feedback.
-tags = Gameplay, Tool

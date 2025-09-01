@@ -1,3 +1,0 @@
-name = Mass Based Collateral System
-author = Litttle_fish
-description = [noupload]Collateral System based on breakage and mass. Tear'em down!

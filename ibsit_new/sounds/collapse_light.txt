@@ -1,5 +1,0 @@
--- Placeholder for collapse_light.ogg
--- This should be a light structural collapse sound effect
--- Recommended: Medium-frequency cracking with small debris sounds
--- Format: OGG Vorbis, 44.1kHz, Stereo
--- Duration: 1-2 seconds

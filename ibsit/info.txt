@@ -1,3 +1,0 @@
-name = Impact Based Structural Integrity Test
-author = Litttle_fish
-description = [noupload]Structural integrity test based on momentum change and collision. Crash and burn!
