@@ -9,7 +9,7 @@ PAUSE MENU ACCESS:
 5. Click the "X" button or press ESC again to close the options menu
 
 OPTIONS MENU FEATURES:
-- 6 Organized Pages: Main, FPS&Dust, Crumble, Explosions, Force&Fire, Advanced
+- 7 Organized Pages: Main, FPS&Dust, Crumble, Explosions, Force&Fire, Advanced, IBSIT v2.0
 - Real-time sliders for numerical settings
 - Toggle buttons for enabling/disabling features
 - Visual feedback with colored buttons and status indicators

@@ -1559,6 +1559,10 @@ function DrawOptionsMenu()
 
     local pages = {"Main", "FPS&Dust", "Crumble", "Explosions", "Force&Fire", "Advanced", "IBSIT v2.0"}
     local currentPage = GetInt("savegame.mod.combined.options_page") or 1
+    if currentPage < 1 or currentPage > #pages then
+        currentPage = 1
+        SetInt("savegame.mod.combined.options_page", 1)
+    end
 
     for i, pageName in ipairs(pages) do
         UiPush()
