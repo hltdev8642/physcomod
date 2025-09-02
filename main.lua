@@ -977,6 +977,12 @@ end
 
 -- Menu function for pause menu UI
 function menu()
+	-- Add pause menu button for options
+	if PauseMenuButton("Physics Mod Settings") then
+		optionsVisible = true
+		SetPaused(true)  -- Keep game paused while in options
+	end
+
 	-- Draw options menu if visible
 	if optionsVisible then
 		UiMakeInteractive()
@@ -1028,12 +1034,6 @@ function tick(dt)
 
 	if windrotstop == false then
 		windstoptime = 0
-	end
-
-	-- Add pause menu button for options
-	if PauseMenuButton("Physics Mod Settings") then
-		optionsVisible = true
-		SetPaused(true)  -- Keep game paused while in options
 	end
 
 	-- Call main functions
@@ -1562,7 +1562,7 @@ function DrawOptionsMenu()
 
     for i, pageName in ipairs(pages) do
         UiPush()
-        UiTranslate((i - 3.5) * 120, 0)
+        UiTranslate((i - 4) * 100, 0)
 
         if currentPage == i then
             UiColor(0.5, 1, 0.5)
@@ -1570,7 +1570,7 @@ function DrawOptionsMenu()
             UiColor(0.7, 0.7, 0.7)
         end
 
-        if UiTextButton(pageName, 100, 40) then
+        if UiTextButton(pageName, 90, 40) then
             SetInt("savegame.mod.combined.options_page", i)
         end
         UiPop()
