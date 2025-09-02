@@ -167,6 +167,77 @@ function resetSettings()
 	SetInt("savegame.mod.combined.DAMSTAT_Currency", 1)
 end
 
+-- Dedicated IBSIT v2 Options Page
+function DrawPage7()
+	UiFont("regular.ttf", 38)
+	UiPush()
+	SetPos(-0.5,-0.55)
+	UiText("IBSIT v2.0 Settings")
+	UiPop()
+
+	-- Use two-column layout; columns will adapt because positions are relative to UiWidth/UiHeight via SetPos
+	local leftX = -0.7
+	local rightX = -0.05
+	local y = -0.40
+	local rowH = 0.07
+
+	UiFont("bold.ttf", 18)
+
+	-- Left column (toggles & core sliders)
+	UiPush(); SetPos(leftX, y); drawButton("Enable IBSIT Haptics", "savegame.mod.combined.ibsit_haptic"); UiPop()
+	UiPush(); SetPos(leftX, y + rowH); drawButton("Enable IBSIT Sounds", "savegame.mod.combined.ibsit_sounds"); UiPop()
+	UiPush(); SetPos(leftX, y + rowH*2); drawButton("Enable IBSIT Particles", "savegame.mod.combined.ibsit_particles"); UiPop()
+	UiPush(); SetPos(leftX, y + rowH*3); drawButton("Vehicle Protection", "savegame.mod.combined.ibsit_vehicle"); UiPop()
+	UiPush(); SetPos(leftX, y + rowH*4); drawButton("Joint Protection", "savegame.mod.combined.ibsit_joint"); UiPop()
+	UiPush(); SetPos(leftX, y + rowH*5); drawButton("General Protection", "savegame.mod.combined.ibsit_protection"); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*6); UiText("IBSIT Volume"); UiPop()
+	UiPush(); SetPos(leftX + 0.12, y + rowH*6); local vvol = optionsSliderFloat("savegame.mod.combined.ibsit_volume", 0.7, 0.0, 1.0, 0.01); UiPop()
+	UiPush(); SetPos(leftX + 0.36, y + rowH*6); UiText(string.format("%.2f", vvol)); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*7); UiText("Particle Quality"); UiPop()
+	UiPush(); SetPos(leftX + 0.22, y + rowH*7); local pqual = optionsSlider("savegame.mod.combined.ibsit_particle_quality", 2, 0, 3); UiPop()
+	UiPush(); SetPos(leftX + 0.42, y + rowH*7); UiText(pqual); UiPop()
+
+	-- Right column (collapse, cleanup, fps optimization)
+	UiPush(); SetPos(rightX, y); drawButton("Gravity Collapse", "savegame.mod.combined.ibsit_gravity_collapse"); UiPop()
+	if GetBool("savegame.mod.combined.ibsit_gravity_collapse") then
+		UiPush(); SetPos(rightX, y + rowH); UiText("Collapse Threshold"); UiPop()
+		UiPush(); SetPos(rightX + 0.18, y + rowH); local cth = optionsSliderFloat("savegame.mod.combined.ibsit_collapse_threshold", 0.3, 0.0, 1.0, 0.01); UiPop()
+		UiPush(); SetPos(rightX + 0.40, y + rowH); UiText(string.format("%.2f", cth)); UiPop()
+
+		UiPush(); SetPos(rightX, y + rowH*2); UiText("Gravity Force"); UiPop()
+		UiPush(); SetPos(rightX + 0.24, y + rowH*2); local gforce = optionsSliderFloat("savegame.mod.combined.ibsit_gravity_force", 2.0, 0.0, 10.0, 0.1); UiPop()
+		UiPush(); SetPos(rightX + 0.48, y + rowH*2); UiText(string.format("%.2f", gforce)); UiPop()
+	end
+
+	UiPush(); SetPos(rightX, y + rowH*3); drawButton("Debris Cleanup", "savegame.mod.combined.ibsit_debris_cleanup"); UiPop()
+	if GetBool("savegame.mod.combined.ibsit_debris_cleanup") then
+		UiPush(); SetPos(rightX, y + rowH*4); UiText("Cleanup Delay (s)"); UiPop()
+		UiPush(); SetPos(rightX + 0.28, y + rowH*4); local cd = optionsSliderFloat("savegame.mod.combined.ibsit_cleanup_delay", 30.0, 0.0, 300.0, 1.0); UiPop()
+		UiPush(); SetPos(rightX + 0.56, y + rowH*4); UiText(string.format("%.0f", cd)); UiPop()
+	end
+
+	UiPush(); SetPos(rightX, y + rowH*5); drawButton("FPS Optimization", "savegame.mod.combined.ibsit_fps_optimization"); UiPop()
+	if GetBool("savegame.mod.combined.ibsit_fps_optimization") then
+		UiPush(); SetPos(rightX, y + rowH*6); UiText("Target FPS"); UiPop()
+		UiPush(); SetPos(rightX + 0.18, y + rowH*6); local tf = optionsSlider("savegame.mod.combined.ibsit_target_fps", 30, 15, 144, 1); UiPop()
+		UiPush(); SetPos(rightX + 0.36, y + rowH*6); UiText(tf); UiPop()
+
+		UiPush(); SetPos(rightX, y + rowH*7); UiText("Performance Scale"); UiPop()
+		UiPush(); SetPos(rightX + 0.36, y + rowH*7); local ps = optionsSliderFloat("savegame.mod.combined.ibsit_performance_scale", 1.0, 0.1, 2.0, 0.01); UiPop()
+		UiPush(); SetPos(rightX + 0.66, y + rowH*7); UiText(string.format("%.2f", ps)); UiPop()
+	end
+
+	-- Small screen protection: draw hint if UiWidth is narrow
+	if UiWidth() < 1200 then
+		UiFont("regular.ttf", 16)
+		UiColor(1,0.6,0.15)
+		UiPush(); SetPos(0, 0.8); UiText("Tip: If controls overlap, increase your game resolution or use UI scaling in game settings."); UiPop()
+		UiColor(1,1,1)
+	end
+end
+
 function optionsSlider(key, default, min, max, incri)
 	local steps = incri or 1
 	local value = (GetInt(key) - min) / (max - min)
@@ -190,6 +261,21 @@ function optionsSliderLarge(key, default, min, max, incri)
 	value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
 	value = math.floor((value*(max-min)+min)/steps+0.5)*steps
 	SetInt(key, value)
+	return value
+end
+
+function optionsSliderFloat(key, default, min, max, step)
+	local steps = step or 0.01
+	local v = (GetFloat and GetFloat(key) or GetInt(key)) or default
+	-- normalize
+	local value = (v - min) / (max - min)
+	local width = 200
+	UiTranslate(100, 0)
+	UiRect(width, 3)
+	UiTranslate(-100, 0)
+	value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
+	value = math.floor((value*(max-min)/steps)+0.5)*steps + min
+	SetFloat(key, value)
 	return value
 end
 
@@ -315,6 +401,20 @@ function page_selector()
 		UiColor(1,1,1)
 	end
 	UiPop()
+	UiPush()
+	SetPos(0.95,-0.7)
+	if GetInt("savegame.mod.combined.options_page")==7 then
+		UiColor(col,col*2,col)
+		if UiTextButton(">IBSIT v2<", 160, 50) then
+			SetInt("savegame.mod.combined.options_page", 7)
+		end
+		else
+		if UiTextButton("IBSIT v2", 160, 50) then
+			SetInt("savegame.mod.combined.options_page", 7)
+		end
+		UiColor(1,1,1)
+	end
+	UiPop()
 end
 
 function SetPos(x,y)
@@ -391,6 +491,8 @@ function draw()
 		DrawPage5()
 	elseif GetInt("savegame.mod.combined.options_page")==6 then
 		DrawPage6()
+	elseif GetInt("savegame.mod.combined.options_page")==7 then
+		DrawPage7()
 	end
 end
 
@@ -817,6 +919,9 @@ function DrawPage3()
 		UiText("Impact-based destruction with momentum calculations")
 		UiPop()
 	end
+
+
+	-- IBSIT v2 moved to its own page (IBSIT v2). Use the IBSIT v2 page button at the top-right to configure advanced IBSIT options.
 end
 
 function DrawPage4()
