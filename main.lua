@@ -1241,8 +1241,8 @@ function tick(dt)
 						local metal_breakage = (crum_DMGHeavy * (mass * 0.008))
 
 						if (broken == true or GetInt("savegame.mod.combined.crum_Source") == 1) then
-							if (mass > (crum_MinMass / 8)) and (vector_len > ((crum_MinSpd) / 20))) and vector_len < ((crum_MaxSpd)) then
-								if ((wood_breakage * crum_dist / 500) + (stone_breakage * crum_dist / 500) + (metal_breakage * crum_dist / 500)) > (0.25 * crum_dist) then
+							if ((mass > (crum_MinMass / 8)) and (vector_len > ((crum_MinSpd) / 20)) and (vector_len < ((crum_MaxSpd)))) then
+								if (((wood_breakage * crum_dist / 500) + (stone_breakage * crum_dist / 500) + (metal_breakage * crum_dist / 500)) > (0.25 * crum_dist)) then
 									crumbled_this_tick = crumbled_this_tick + 1
 									MakeHole(GetBodyTransform(body).pos, wood_breakage * crum_dist / 500, stone_breakage * crum_dist / 500, metal_breakage * crum_dist / 500)
 									hole_count = hole_count + 1
@@ -1559,15 +1559,16 @@ function DrawOptionsMenu()
 
     for i, pageName in ipairs(pages) do
         UiPush()
-        UiTranslate((i - 3.5) * 120, 0)
-
+        -- UiTranslate((i - 3.5) * 120, 0)
+        UiTranslate((i - 4.0) * 100, 0)
         if currentPage == i then
             UiColor(0.5, 1, 0.5)
         else
             UiColor(0.7, 0.7, 0.7)
         end
 
-        if UiTextButton(pageName, 100, 40) then
+        -- if UiTextButton(pageName, 100, 40) then
+        if UiTextButton(pageName, 90, 40) then
             SetInt("savegame.mod.combined.options_page", i)
         end
         UiPop()
