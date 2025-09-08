@@ -2,6 +2,22 @@
 -- please do not rename slimegcfunc.lua, thanks.
 
 --{
+    -- Ensure a safe global upongc exists to avoid nil-call errors when proxy GC fires
+    if type(upongc) ~= "function" then
+        -- provide a wrapper that will call module-specific handlers if they exist
+        upongc = function(self)
+            -- Call IBSIT handler if available
+            if type(upongc_ibsit) == "function" then
+                pcall(upongc_ibsit)
+            end
+            -- Call MBCS handler if available
+            if type(upongc_mbcs) == "function" then
+                pcall(upongc_mbcs)
+            end
+            -- no-op otherwise
+        end
+    end
+
     getmetatable(newproxy(true)).__gc = function(self) upongc(self) return newproxy(self) end
 --}
 

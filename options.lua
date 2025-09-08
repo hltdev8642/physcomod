@@ -99,6 +99,8 @@ function resetSettings()
 	SetBool("savegame.mod.combined.ibsit_haptic", true)
 	SetBool("savegame.mod.combined.ibsit_sounds", true)
 	SetBool("savegame.mod.combined.ibsit_particles", true)
+	-- Structural Integrity Scanner default (tool toggle)
+	SetBool("savegame.mod.combined.tool.integrity_scanner.enabled", false)
 	SetBool("savegame.mod.combined.ibsit_vehicle", false)
 	SetBool("savegame.mod.combined.ibsit_joint", false)
 	SetBool("savegame.mod.combined.ibsit_protection", false)
@@ -166,6 +168,18 @@ function resetSettings()
 	-- Damage Statistics Section
 	SetInt("savegame.mod.combined.DAMSTAT_Currency", 1)
 end
+	-- Scanner tuning defaults
+	SetFloat("savegame.mod.combined.scanner_cell", 1.0)
+	SetInt("savegame.mod.combined.scanner_iter", 6)
+	SetFloat("savegame.mod.combined.scanner_factor", 5.0)
+	SetFloat("savegame.mod.combined.scanner_pad", 0.02)
+	SetFloat("savegame.mod.combined.scanner_threshold", 0.9)
+	SetBool("savegame.mod.combined.scanner_autobreak", false)
+	SetFloat("savegame.mod.combined.scanner_cooldown", 8.0)
+	-- Extra scanner display / safety settings
+	SetBool("savegame.mod.combined.scanner_show_legend", true)
+	SetBool("savegame.mod.combined.scanner_show_numbers", false)
+	SetInt("savegame.mod.combined.scanner_max_breaks_per_tick", 3)
 
 -- Dedicated IBSIT v2 Options Page
 function DrawPage7()
@@ -191,13 +205,50 @@ function DrawPage7()
 	UiPush(); SetPos(leftX, y + rowH*4); drawButton("Joint Protection", "savegame.mod.combined.ibsit_joint"); UiPop()
 	UiPush(); SetPos(leftX, y + rowH*5); drawButton("General Protection", "savegame.mod.combined.ibsit_protection"); UiPop()
 
-	UiPush(); SetPos(leftX, y + rowH*6); UiText("IBSIT Volume"); UiPop()
-	UiPush(); SetPos(leftX + 0.12, y + rowH*6); local vvol = optionsSliderFloat("savegame.mod.combined.ibsit_volume", 0.7, 0.0, 1.0, 0.01); UiPop()
-	UiPush(); SetPos(leftX + 0.36, y + rowH*6); UiText(string.format("%.2f", vvol)); UiPop()
+	-- Scanner toggle (left column below protection)
+	UiPush(); SetPos(leftX, y + rowH*6); drawButton("Enable Structural Scanner", "savegame.mod.combined.tool.integrity_scanner.enabled"); UiPop()
 
-	UiPush(); SetPos(leftX, y + rowH*7); UiText("Particle Quality"); UiPop()
-	UiPush(); SetPos(leftX + 0.22, y + rowH*7); local pqual = optionsSlider("savegame.mod.combined.ibsit_particle_quality", 2, 0, 3); UiPop()
-	UiPush(); SetPos(leftX + 0.42, y + rowH*7); UiText(pqual); UiPop()
+	-- Scanner tuning controls
+	UiPush(); SetPos(leftX, y + rowH*7); UiText("Scanner Cell Size"); UiPop()
+	UiPush(); SetPos(leftX + 0.22, y + rowH*7); local sc = optionsSliderFloat("savegame.mod.combined.scanner_cell", 1.0, 0.1, 8.0, 0.1); UiPop()
+	UiPush(); SetPos(leftX + 0.46, y + rowH*7); UiText(string.format("%.2f", sc)); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*8); UiText("Propagation Iterations"); UiPop()
+	UiPush(); SetPos(leftX + 0.28, y + rowH*8); local iters = optionsSlider("savegame.mod.combined.scanner_iter", 6, 1, 12); UiPop()
+	UiPush(); SetPos(leftX + 0.46, y + rowH*8); UiText(iters); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*9); UiText("Stress Factor"); UiPop()
+	UiPush(); SetPos(leftX + 0.22, y + rowH*9); local factor = optionsSliderFloat("savegame.mod.combined.scanner_factor", 5.0, 0.5, 20.0, 0.1); UiPop()
+	UiPush(); SetPos(leftX + 0.46, y + rowH*9); UiText(string.format("%.2f", factor)); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*10); UiText("Pad (AABB expand)"); UiPop()
+	UiPush(); SetPos(leftX + 0.22, y + rowH*10); local pad = optionsSliderFloat("savegame.mod.combined.scanner_pad", 0.02, 0.0, 0.2, 0.01); UiPop()
+	UiPush(); SetPos(leftX + 0.46, y + rowH*10); UiText(string.format("%.2f", pad)); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*11); UiText("Auto-break Threshold"); UiPop()
+	UiPush(); SetPos(leftX + 0.30, y + rowH*11); local thresh = optionsSliderFloat("savegame.mod.combined.scanner_threshold", 0.9, 0.1, 1.0, 0.01); UiPop()
+	UiPush(); SetPos(leftX + 0.56, y + rowH*11); UiText(string.format("%.2f", thresh)); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*12); drawButton("Auto-break Enabled", "savegame.mod.combined.scanner_autobreak"); UiPop()
+	UiPush(); SetPos(leftX + 0.36, y + rowH*12); UiText("Cooldown (s)"); UiPop()
+	UiPush(); SetPos(leftX + 0.56, y + rowH*12); local cd = optionsSliderFloat("savegame.mod.combined.scanner_cooldown", 8.0, 1.0, 60.0, 1.0); UiPop()
+	UiPush(); SetPos(leftX + 0.80, y + rowH*12); UiText(string.format("%.0f", cd)); UiPop()
+
+	-- Scanner display / safety controls
+	UiPush(); SetPos(leftX, y + rowH*13); drawButton("Show Scanner Legend", "savegame.mod.combined.scanner_show_legend"); UiPop()
+	UiPush(); SetPos(leftX + 0.36, y + rowH*13); drawButton("Show Numbers (stress)", "savegame.mod.combined.scanner_show_numbers"); UiPop()
+	UiPush(); SetPos(leftX, y + rowH*14); UiText("Max Auto-breaks / Tick"); UiPop()
+	UiPush(); SetPos(leftX + 0.32, y + rowH*14); local maxb = optionsSlider("savegame.mod.combined.scanner_max_breaks_per_tick", 3, 0, 20); UiPop()
+	UiPush(); SetPos(leftX + 0.56, y + rowH*14); UiText(maxb); UiPop()
+
+	-- Move IBSIT volume/particle controls lower so they don't overlap scanner controls
+	UiPush(); SetPos(leftX, y + rowH*15); UiText("IBSIT Volume"); UiPop()
+	UiPush(); SetPos(leftX + 0.12, y + rowH*15); local vvol = optionsSliderFloat("savegame.mod.combined.ibsit_volume", 0.7, 0.0, 1.0, 0.01); UiPop()
+	UiPush(); SetPos(leftX + 0.36, y + rowH*15); UiText(string.format("%.2f", vvol)); UiPop()
+
+	UiPush(); SetPos(leftX, y + rowH*16); UiText("Particle Quality"); UiPop()
+	UiPush(); SetPos(leftX + 0.22, y + rowH*16); local pqual = optionsSlider("savegame.mod.combined.ibsit_particle_quality", 2, 0, 3); UiPop()
+	UiPush(); SetPos(leftX + 0.42, y + rowH*16); UiText(pqual); UiPop()
 
 	-- Right column (collapse, cleanup, fps optimization)
 	UiPush(); SetPos(rightX, y); drawButton("Gravity Collapse", "savegame.mod.combined.ibsit_gravity_collapse"); UiPop()

@@ -1,6 +1,7 @@
 #include "umf/umf_meta.lua"
 #include "slimerand.lua"
 #include "slimegcfunc.lua"
+#include "tools/integrity_scanner.lua"
 
 -- Combined Physics Destruction Mod
 -- Merges features from PDM (Progressive Destruction), IBSIT (Impact Based), and MBCS (Mass Based)
@@ -866,6 +867,9 @@ end
 
 -- Initialize function
 function init()
+	-- Initialize additional tools
+	if integrity_scanner_init then integrity_scanner_init() end
+
 	if not HasKey("savegame.mod.combined") then
 		-- Set default values for combined mod
 		SetBool("savegame.mod.combined.Tog_FPSC", false)
@@ -979,6 +983,9 @@ function draw(dt)
 		UiMakeInteractive()
 		DrawOptionsMenu()
 	end
+
+	-- Draw scanner visuals if provided
+	if integrity_scanner_draw then integrity_scanner_draw() end
 end
 
 -- Tick function - Main game loop
@@ -1035,6 +1042,9 @@ function tick(dt)
 
 	-- Call main functions
 	callFunctions()
+
+	-- Run scanner tick
+	if integrity_scanner_tick then integrity_scanner_tick(dt) end
 
 	-- IBSIT processing (Enhanced v2.0)
 	if TOG_IMPACT and not ibsit_triggered then
@@ -1483,6 +1493,46 @@ function postUpdate()
 				end
 			else
 				ibsit_vel[body], ibsit_vel[-body], ibsit_time[body], ibsit_time[-body], ibsit_pos[body], ibsit_pos[-body] = nil, nil, nil, nil, nil, nil
+			end
+		end
+	end
+
+	-- Scanner-driven progressive collapse integration
+	-- If scanner tags a body with scanner_stress and scanner_autobreak is enabled,
+	-- call IBSIT collapse logic so material-aware breaking and gravity collapse happens.
+	if GetBool("savegame.mod.combined.scanner_autobreak") then
+		local tagged = FindBodies("scanner_stress", true)
+		for i = #tagged, 1, -1 do
+			local b = tagged[i]
+			if IsHandleValid(b) and IsBodyActive(b) then
+				local stressStr = GetTagValue(b, "scanner_stress")
+				if stressStr then
+					local stressVal = tonumber(stressStr) or 0
+					-- Only trigger collapse if stress is above threshold (use scanner_threshold)
+					local thresh = GetFloat("savegame.mod.combined.scanner_threshold") or 0.9
+					if stressVal >= thresh then
+						-- compute integrity and apply collapse forces
+						local integrity = calculateStructuralIntegrity_ibsit(b)
+						applyGravityCollapse_ibsit(b, integrity)
+						-- Additionally attempt enhanced breaking coroutine if impact heuristics apply
+						if IsBodyBroken(b) and IsBodyActive(b) then
+							local c = GetBodyCenterOfMass(b)
+							local s = GetBodyVelocity(b)
+							local a = VecLength(s) * GetBodyMass(b)
+							if a > threshold_ibsit then
+								local co = co_create(enhancedBreaks_ibsit)
+								_, val = co_resume(co, b, c, s, a * rthreshold_ibsit - 4)
+								if val == true then
+									ibsit_breaklist[#ibsit_breaklist + 1] = co
+								end
+							end
+						end
+					end
+					-- clear scanner tags to avoid re-triggering until scanner updates them again
+					RemoveTag(b, "scanner_stress")
+					RemoveTag(b, "scanner_center")
+					RemoveTag(b, "scanner_last")
+				end
 			end
 		end
 	end
