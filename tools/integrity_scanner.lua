@@ -76,7 +76,10 @@ function integrity_scanner_tick(dt)
     -- Toggle visualization with LMB while the tool is active
     -- Also accept 'g' as a fallback hotkey in case LMB is consumed by UI
     if toolActive and (InputPressed("lmb") or InputPressed("g")) then
-        showScanner = not showScanner
+        SetBool("savegame.mod.combined.tool.integrity_scanner.enabled", true)
+        DebugPrint("Scanner: LMB or G pressed, toggling overlay")
+        -- showScanner = not showScanner
+        showScanner = GetBool("savegame.mod.combined.tool.integrity_scanner.enabled")
         if showScanner then
             buildStructuralGraph()
             calculateStress(false, maxBreaks)

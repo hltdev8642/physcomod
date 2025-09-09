@@ -1,189 +1,92 @@
+#include "main.lua"
+#include "defaults.lua"
 -- Combined Physics Destruction Mod Options
 -- Unified options for PDM, IBSIT, and MBCS features
 
 -- Constants
 local fireLimit
-SetBool("savegame.mod.combined.dust_DustMeth", false)
 -- saved popup expiry timestamp
 local savedPopupExpire = 0
 
 function resetSettings()
-	-- Main toggles
-	SetBool("savegame.mod.combined.Tog_FPSC", false)
-	SetBool("savegame.mod.combined.Tog_DUST", false)
-	SetBool("savegame.mod.combined.Tog_CRUMBLE", true)
-	SetBool("savegame.mod.combined.Tog_RUMBLE", false)
-	SetBool("savegame.mod.combined.Tog_FORCE", false)
-	SetBool("savegame.mod.combined.Tog_FIRE", false)
-	SetBool("savegame.mod.combined.Tog_VIOLENCE", false)
-	SetBool("savegame.mod.combined.Tog_DAMSTAT", false)
-	SetBool("savegame.mod.combined.Tog_JOINTS", false)
-	SetBool("savegame.mod.combined.Tog_IMPACT", true)
-	SetBool("savegame.mod.combined.Tog_MASS", true)
+	-- Delegate to canonical reset if available; ApplyDefaultSettings is the single source of truth
+	if ResetAllSettings then
+		pcall(ResetAllSettings)
+		savedPopupExpire = GetTime() + 1.5
+		return
+	end
 
-	-- FPS Control Section
-	SetBool("savegame.mod.combined.FPS_DynLights", true)
-	SetBool("savegame.mod.combined.Tog_SDF", true)
-	SetBool("savegame.mod.combined.Tog_LFF", false)
-	SetBool("savegame.mod.combined.Tog_DBF", false)
-	SetInt("savegame.mod.combined.FPS_SDF", 7)
-	SetInt("savegame.mod.combined.FPS_LFF", 0)
-	SetInt("savegame.mod.combined.FPS_DBF", 0)
-	SetInt("savegame.mod.combined.FPS_DBF_size", 35)
-	SetBool("savegame.mod.combined.FPS_DBF_FPSB", true)
-	SetInt("savegame.mod.combined.FPS_SDF_agg", 3)
-	SetInt("savegame.mod.combined.FPS_LFF_agg", 1)
-	SetInt("savegame.mod.combined.FPS_DBF_agg", 1)
-	SetInt("savegame.mod.combined.FPS_Targ", 30)
-	SetInt("savegame.mod.combined.FPS_Agg", 1)
-	SetBool("savegame.mod.combined.FPS_GLOB_agg", false)
-	SetInt("savegame.mod.combined.FPS_GLOB_aggfac", 0)
+	if ApplyDefaultSettings then
+		pcall(ApplyDefaultSettings)
+		savedPopupExpire = GetTime() + 1.5
+		return
+	end
 
-	-- Dust Control Section
-	SetInt("savegame.mod.combined.dust_amt", 50)
-	SetInt("savegame.mod.combined.dust_size", 100)
-	SetInt("savegame.mod.combined.dust_sizernd", 50)
-	SetInt("savegame.mod.combined.dust_MsBsSz", 50)
-	SetInt("savegame.mod.combined.dust_grav", 35)
-	SetInt("savegame.mod.combined.dust_drag", 15)
-	SetInt("savegame.mod.combined.dust_life", 16)
-	SetInt("savegame.mod.combined.dust_lifernd", 10)
-	SetInt("savegame.mod.combined.dust_MsBsLf", 20)
-	SetInt("savegame.mod.combined.dust_minMass", 3)
-	SetInt("savegame.mod.combined.dust_minSpeed", 3)
-	SetInt("savegame.mod.combined.dust_startsize", 10)
-	SetInt("savegame.mod.combined.dust_fader", 5)
-
-	-- Crumbling Section
-	SetBool("savegame.mod.combined.tog_crum", true)
-	SetInt("savegame.mod.combined.tog_crum_MODE", 0)
-	SetInt("savegame.mod.combined.tog_crum_Source", 0)
-	SetInt("savegame.mod.combined.crum_DMGLight", 50)
-	SetInt("savegame.mod.combined.crum_DMGMed", 50)
-	SetInt("savegame.mod.combined.crum_DMGHeavy", 50)
-	SetInt("savegame.mod.combined.crum_spd", 2)
-	SetFloat("savegame.mod.combined.crum_spdRND", 0.01)
-	SetInt("savegame.mod.combined.crum_dist", 8)
-	SetBool("savegame.mod.combined.vehicles_crumble", false)
-	SetInt("savegame.mod.combined.crum_HoleControl", 4)
-	SetFloat("savegame.mod.combined.crum_BreakTime", 2.5)
-	SetInt("savegame.mod.combined.crum_distFromPlyr", 40)
-	SetInt("savegame.mod.combined.crum_MinMass", 1)
-	SetInt("savegame.mod.combined.crum_MaxMass", 1000)
-	SetFloat("savegame.mod.combined.crum_MinSpd", 0.0025)
-	SetFloat("savegame.mod.combined.crum_MaxSpd", 8)
-
-	-- Explosions Section
-	SetFloat("savegame.mod.combined.xplo_szBase", 0.35)
-	SetFloat("savegame.mod.combined.xplo_szRND", 0.15)
-	SetFloat("savegame.mod.combined.xplo_szMBV", 0.15)
-	SetInt("savegame.mod.combined.xplo_chance", 4)
-	SetInt("savegame.mod.combined.xplo_HoleControl", 4)
-	SetFloat("savegame.mod.combined.xplo_BreakTime", 2.5)
-	SetInt("savegame.mod.combined.xplo_distFromPlyr", 40)
-	SetInt("savegame.mod.combined.xplo_MinMass", 1)
-	SetInt("savegame.mod.combined.xplo_MaxMass", 10000)
-	SetFloat("savegame.mod.combined.xplo_MinSpd", 0.0025)
-	SetFloat("savegame.mod.combined.xplo_MaxSpd", 8)
-	SetInt("savegame.mod.combined.xplo_SmokeAMT", 2)
-	SetInt("savegame.mod.combined.xplo_LifeAMT", 2)
-	SetInt("savegame.mod.combined.xplo_Pressure", 4)
-	SetInt("savegame.mod.combined.xplo_mode", 1)
-
-	-- IBSIT Settings
-	SetInt("savegame.mod.combined.ibsit_momentum", 12)
-	SetInt("savegame.mod.combined.ibsit_dust_amt", 50)
-	SetInt("savegame.mod.combined.ibsit_wood_size", 100)
-	SetInt("savegame.mod.combined.ibsit_stone_size", 75)
-	SetInt("savegame.mod.combined.ibsit_metal_size", 50)
-
-	-- IBSIT v2.0 Enhanced Settings
-	SetBool("savegame.mod.combined.ibsit_haptic", true)
-	SetBool("savegame.mod.combined.ibsit_sounds", true)
-	SetBool("savegame.mod.combined.ibsit_particles", true)
-	-- Structural Integrity Scanner default (tool toggle)
-	SetBool("savegame.mod.combined.tool.integrity_scanner.enabled", true)
-	SetBool("savegame.mod.combined.ibsit_vehicle", false)
-	SetBool("savegame.mod.combined.ibsit_joint", false)
-	SetBool("savegame.mod.combined.ibsit_protection", false)
-	SetFloat("savegame.mod.combined.ibsit_volume", 0.7)
-	SetInt("savegame.mod.combined.ibsit_particle_quality", 2)
-	SetBool("savegame.mod.combined.ibsit_gravity_collapse", true)
-	SetFloat("savegame.mod.combined.ibsit_collapse_threshold", 0.3)
-	SetFloat("savegame.mod.combined.ibsit_gravity_force", 2.0)
-	SetBool("savegame.mod.combined.ibsit_debris_cleanup", true)
-	SetFloat("savegame.mod.combined.ibsit_cleanup_delay", 30.0)
-	SetBool("savegame.mod.combined.ibsit_fps_optimization", true)
-	SetInt("savegame.mod.combined.ibsit_target_fps", 30)
-	SetFloat("savegame.mod.combined.ibsit_performance_scale", 1.0)
-
-	-- MBCS Settings
-	SetInt("savegame.mod.combined.mbcs_mass", 8)
-	SetInt("savegame.mod.combined.mbcs_distance", 4)
-	SetInt("savegame.mod.combined.mbcs_dust_amt", 50)
-	SetInt("savegame.mod.combined.mbcs_wood_size", 100)
-	SetInt("savegame.mod.combined.mbcs_stone_size", 75)
-	SetInt("savegame.mod.combined.mbcs_metal_size", 50)
-
-	-- Force and Wind Section
-	SetInt("savegame.mod.combined.force_method", 1)
-	SetInt("savegame.mod.combined.force_gamecontrols", 0.35)
-	SetInt("savegame.mod.combined.force_radius", 0.35)
-	SetInt("savegame.mod.combined.force_maxmass", 0.35)
-	SetInt("savegame.mod.combined.force_minmass", 0.35)
-	SetInt("savegame.mod.combined.force_strength", 0.35)
-	SetInt("savegame.mod.combined.force_boost", 0.35)
-	SetBool("savegame.mod.combined.force_EdgeFade", true)
-	SetBool("savegame.mod.combined.force_START_ON", false)
-	SetBool("savegame.mod.combined.force_ENABLE_CONTROLS", false)
-	SetBool("savegame.mod.combined.force_Showcross", false)
-	SetBool("savegame.mod.combined.force_CONTROL_TIPS", false)
-	SetInt("savegame.mod.combined.force_cycle", 0.35)
-	SetInt("savegame.mod.combined.force_largemass_accellerator", 0.35)
-	SetInt("savegame.mod.combined.force_upforce", 0.35)
-	SetInt("savegame.mod.combined.force_effect_on_player", 0)
-	SetInt("savegame.mod.combined.force_rotational", 0)
-	SetInt("savegame.mod.combined.force_warmup", 1)
-
-	-- Fire Section
-	SetInt("savegame.mod.combined.fyr_mode", 1)
-	SetInt("savegame.mod.combined.fyr_maxrad", 15)
-	SetInt("savegame.mod.combined.fyr_minrad", 4)
-	SetInt("savegame.mod.combined.fyr_chance", 1)
-	SetInt("savegame.mod.combined.fyr_maxmass", 4000)
-	SetInt("savegame.mod.combined.fyr_minmass", 2)
-
-	-- Violence Section
-	SetInt("savegame.mod.combined.VIOL_mode", 1)
-	SetInt("savegame.mod.combined.VIOL_Chance", 1)
-	SetInt("savegame.mod.combined.VIOL_mover", 2)
-	SetInt("savegame.mod.combined.VIOL_turnr", 2)
-	SetInt("savegame.mod.combined.VIOL_minmass", 5)
-	SetInt("savegame.mod.combined.VIOL_maxmass", 2000)
-	SetInt("savegame.mod.combined.VIOL_maxdist", 50)
-
-	-- Joint Breakage Section
-	SetInt("savegame.mod.combined.JOINT_Source", 1)
-	SetInt("savegame.mod.combined.JOINT_Range", 5)
-	SetInt("savegame.mod.combined.JOINT_Chance", 5)
-
-	-- Damage Statistics Section
-	SetInt("savegame.mod.combined.DAMSTAT_Currency", 1)
+	-- Defaults are centralized in defaults.lua via ApplyDefaultSettings()
 end
-	-- Scanner tuning defaults (only set if not already present)
-	if GetFloat("savegame.mod.combined.scanner_cell") == nil then SetFloat("savegame.mod.combined.scanner_cell", 1.0) end
-	if GetInt("savegame.mod.combined.scanner_iter") == nil then SetInt("savegame.mod.combined.scanner_iter", 6) end
-	if GetFloat("savegame.mod.combined.scanner_factor") == nil then SetFloat("savegame.mod.combined.scanner_factor", 5.0) end
-	if GetFloat("savegame.mod.combined.scanner_pad") == nil then SetFloat("savegame.mod.combined.scanner_pad", 0.02) end
-	if GetFloat("savegame.mod.combined.scanner_threshold") == nil then SetFloat("savegame.mod.combined.scanner_threshold", 0.9) end
-	if GetBool("savegame.mod.combined.scanner_autobreak") == nil then SetBool("savegame.mod.combined.scanner_autobreak", false) end
-	if GetFloat("savegame.mod.combined.scanner_cooldown") == nil then SetFloat("savegame.mod.combined.scanner_cooldown", 8.0) end
-	-- Extra scanner display / safety settings
-	if GetBool("savegame.mod.combined.scanner_show_legend") == nil then SetBool("savegame.mod.combined.scanner_show_legend", true) end
-	if GetBool("savegame.mod.combined.scanner_show_numbers") == nil then SetBool("savegame.mod.combined.scanner_show_numbers", false) end
-	if GetInt("savegame.mod.combined.scanner_max_breaks_per_tick") == nil then SetInt("savegame.mod.combined.scanner_max_breaks_per_tick", 3) end
 
 -- Dedicated IBSIT v2 Options Page
+-- Fallback UI helpers: these provide minimal implementations of helper functions
+-- used throughout the options pages. If a project's UI helper library provides
+-- more advanced versions, those will supersede these because they run earlier
+-- via includes. These fallbacks prevent the pages from appearing empty.
+function drawButton(label, key)
+	-- label: string to show
+	-- key: registry key for a boolean toggle (may be nil)
+	local val = false
+	if GetBool and key then val = GetBool(key) end
+	UiAlign("left middle")
+	UiText(label)
+	UiTranslate(220, 0)
+	if val then UiColor(0.5, 1, 0.5) else UiColor(0.7, 0.7, 0.7) end
+	if UiTextButton(val and "ON" or "OFF", 90, 28) then
+		if SetBool and key then SetBool(key, not val) end
+	end
+	UiColor(1,1,1)
+end
+
+function optionsSlider(key, default, min, max, incri)
+    local steps = incri or 1
+    local value = (GetInt(key) - min) / (max - min)
+    local width = 100
+    UiTranslate(50, 0)
+    UiRect(width, 3)
+    UiTranslate(-50, 0)
+    value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
+    value = math.floor((value*(max-min)+min)/steps+0.5)*steps
+    SetInt(key, value)
+    return value
+end
+
+function optionsSliderFloat(key, default, min, max, step)
+    local steps = step or 0.01
+    local v = (GetFloat and GetFloat(key) or GetInt(key)) or default
+    -- normalize
+    local value = (v - min) / (max - min)
+    local width = 200
+    UiTranslate(100, 0)
+    UiRect(width, 3)
+    UiTranslate(-100, 0)
+    value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
+    value = math.floor((value*(max-min)/steps)+0.5)*steps + min
+    SetFloat(key, value)
+    return value
+end
+
+function optionsSliderYuge(key, default, min, max, incri)
+    local steps = incri or 1
+    local value = (GetInt(key) - min) / (max - min)
+    local width = 500
+    UiTranslate(250, 0)
+    UiRect(width, 3)
+    UiTranslate(-250, 0)
+    value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
+    value = math.floor((value*(max-min)+min)/steps+0.5)*steps
+    SetInt(key, value)
+    return value
+end
+
+
 function DrawPage7()
 	UiFont("regular.ttf", 38)
 	UiPush()
@@ -276,164 +179,18 @@ function DrawPage7()
 		UiPush(); SetPos(rightX, y + rowH*6); UiText("Target FPS"); UiPop()
 		UiPush(); SetPos(rightX + 0.18, y + rowH*6); local tf = optionsSlider("savegame.mod.combined.ibsit_target_fps", 30, 15, 144, 1); UiPop()
 		UiPush(); SetPos(rightX + 0.36, y + rowH*6); UiText(tf); UiPop()
+			-- Delegate saving to canonical SaveAllSettings if available
+			if SaveAllSettings then
+				pcall(SaveAllSettings)
+				savedPopupExpire = GetTime() + 1.5
+				return
+			end
 
-		UiPush(); SetPos(rightX, y + rowH*7); UiText("Performance Scale"); UiPop()
-		UiPush(); SetPos(rightX + 0.36, y + rowH*7); local ps = optionsSliderFloat("savegame.mod.combined.ibsit_performance_scale", 1.0, 0.1, 2.0, 0.01); UiPop()
-		UiPush(); SetPos(rightX + 0.66, y + rowH*7); UiText(string.format("%.2f", ps)); UiPop()
-	end
-
-	-- Small screen protection: draw hint if UiWidth is narrow
-	if UiWidth() < 1200 then
-		UiFont("regular.ttf", 16)
-		UiColor(1,0.6,0.15)
-		UiPush(); SetPos(0, 0.8); UiText("Tip: If controls overlap, increase your game resolution or use UI scaling in game settings."); UiPop()
-		UiColor(1,1,1)
-	end
-end
-
-function optionsSlider(key, default, min, max, incri)
-	local steps = incri or 1
-	local value = (GetInt(key) - min) / (max - min)
-	local width = 100
-	UiTranslate(50, 0)
-	UiRect(width, 3)
-	UiTranslate(-50, 0)
-	value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
-	value = math.floor((value*(max-min)+min)/steps+0.5)*steps
-	SetInt(key, value)
-	return value
-end
-
-function optionsSliderLarge(key, default, min, max, incri)
-	local steps = incri or 1
-	local value = (GetInt(key) - min) / (max - min)
-	local width = 200
-	UiTranslate(100, 0)
-	UiRect(width, 3)
-	UiTranslate(-100, 0)
-	value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
-	value = math.floor((value*(max-min)+min)/steps+0.5)*steps
-	SetInt(key, value)
-	return value
-end
-
-function optionsSliderFloat(key, default, min, max, step)
-	local steps = step or 0.01
-	local v = (GetFloat and GetFloat(key) or GetInt(key)) or default
-	-- normalize
-	local value = (v - min) / (max - min)
-	local width = 200
-	UiTranslate(100, 0)
-	UiRect(width, 3)
-	UiTranslate(-100, 0)
-	value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
-	value = math.floor((value*(max-min)/steps)+0.5)*steps + min
-	SetFloat(key, value)
-	return value
-end
-
-function optionsSliderYuge(key, default, min, max, incri)
-	local steps = incri or 1
-	local value = (GetInt(key) - min) / (max - min)
-	local width = 500
-	UiTranslate(250, 0)
-	UiRect(width, 3)
-	UiTranslate(-250, 0)
-	value = UiSlider("ui/common/dot.png", "x", value*width, 0, width)/width
-	value = math.floor((value*(max-min)+min)/steps+0.5)*steps
-	SetInt(key, value)
-	return value
-end
-
-function drawButton(title, key, value)
-	if UiTextButton(title .. " (" .. (GetBool(key) and "enabled" or "disabled") .. ")", 340, 32) then
-		SetBool(key, not GetBool(key))
-	end
-	if GetBool(key) then
-		UiColor(0.5, 1, 0.5)
-		UiTranslate(-145, 0)
-		UiImage("ui/menu/mod-active.png")
-	else
-		UiTranslate(-145, 0)
-		UiImage("ui/menu/mod-inactive.png")
-	end
-end
-
-function init()
-	if(GetBool("savegame.mod.performance.launch")) then
-		fireLimit = GetInt("savegame.mod.performance.fire_limit")
-	end
-	SetBool("savegame.mod.combined.launch", false)
-end
-
-function page_selector()
-	UiFont("regular.ttf", 34)
-	UiButtonImageBox("ui/common/box-outline-6.png", 6, 6)
-	UiPush()
-	SetPos(-0.85,-0.7)
-	local col=0.5+(math.sin(GetTime()*4)/2)
-	if GetInt("savegame.mod.combined.options_page")==1 then
-		UiColor(col,col*2,col)
-		if UiTextButton(">Main<", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 1)
-		end
-		else
-		if UiTextButton("Main", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 1)
-		end
-		UiColor(1,1,1)
-	end
-	UiPop()
-	UiPush()
-	SetPos(-0.55,-0.7)
-	if GetInt("savegame.mod.combined.options_page")==2 then
-		UiColor(col,col*2,col)
-		if UiTextButton(">FPS&Dust<", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 2)
-		end
-		else
-		if UiTextButton("FPS&Dust", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 2)
-		end
-		UiColor(1,1,1)
-	end
-	UiPop()
-	UiPush()
-	SetPos(-0.25,-0.7)
-	if GetInt("savegame.mod.combined.options_page")==3 then
-		UiColor(col,col*2,col)
-		if UiTextButton(">Crumble<", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 3)
-		end
-		else
-		if UiTextButton("Crumble", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 3)
-		end
-		UiColor(1,1,1)
-	end
-	UiPop()
-	UiPush()
-	SetPos(0.05,-0.7)
-	if GetInt("savegame.mod.combined.options_page")==4 then
-		UiColor(col,col*2,col)
-		if UiTextButton(">Explosions<", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 4)
-		end
-		else
-		if UiTextButton("Explosions", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 4)
-		end
-		UiColor(1,1,1)
-	end
-	UiPop()
-	UiPush()
-	SetPos(0.35,-0.7)
-	if GetInt("savegame.mod.combined.options_page")==5 then
-		UiColor(col,col*2,col)
-		if UiTextButton(">Force&Fire<", 200, 50) then
-			SetInt("savegame.mod.combined.options_page", 5)
-		end
-		else
+			-- Fallback: if SaveAllSettings isn't present, write a minimal piece of UI state so the
+			-- options page index survives without the main saver. All other keys are written by
+			-- SaveAllSettings in main.lua.
+			if SetInt then SetInt("savegame.mod.combined.options_page", GetInt("savegame.mod.combined.options_page")) end
+			savedPopupExpire = GetTime() + 1.5
 		if UiTextButton("Force&Fire", 200, 50) then
 			SetInt("savegame.mod.combined.options_page", 5)
 		end
@@ -481,6 +238,40 @@ function Rectangle(sx,sy,ex,ey)
 	local cy = UiHeight() / 2
 	UiTranslate(cx + cx * sx, cy + cy * sy)
 	UiRect((cx + cx * ex)-(cx + cx * sx),(cy + cy * ey)-(cy + cy * sy))
+end
+
+-- Page selector used by the options UI. Implemented here because some code calls
+-- page_selector() from the local draw() and it was missing, causing the menu to
+-- fail to render. This mirrors the page selector already used in main.lua.
+function page_selector()
+	UiPush()
+	-- Position the tab row near the top-center so buttons aren't cut off on the left
+	local cx = UiWidth() / 2
+	-- Move tabs further down (px) so they don't overlap the title at the top
+	UiTranslate(cx, 120)
+
+	local pages = {"Main", "FPS&Dust", "Crumble", "Explosions", "Force&Fire", "Advanced", "IBSIT v2.0"}
+	local currentPage = GetInt("savegame.mod.combined.options_page") or 1
+	local n = #pages
+	local spacing = 130 -- horizontal spacing between tabs (pixels)
+
+	-- Center tabs around the screen middle
+	for i, pageName in ipairs(pages) do
+		UiPush()
+		local offset = (i - (n + 1) / 2) * spacing
+		UiTranslate(offset, 0)
+		if currentPage == i then
+			UiColor(0.5, 1, 0.5)
+		else
+			UiColor(0.8, 0.8, 0.8)
+		end
+		if UiTextButton(pageName, 120, 40) then
+			SetInt("savegame.mod.combined.options_page", i)
+		end
+		UiPop()
+	end
+	UiColor(1,1,1)
+	UiPop()
 end
 
 function draw()
@@ -539,19 +330,22 @@ function draw()
 	page_selector()
 	UiFont("regular.ttf", 24)
 
-	if GetInt("savegame.mod.combined.options_page")==1 then
+	-- Use a local currentPage with a sensible default so page content renders even when
+	-- the registry key hasn't been written yet (first-open case).
+	local currentPage = GetInt("savegame.mod.combined.options_page") or 1
+	if currentPage == 1 then
 		DrawPage1()
-	elseif GetInt("savegame.mod.combined.options_page")==2 then
+	elseif currentPage == 2 then
 		DrawPage2()
-	elseif GetInt("savegame.mod.combined.options_page")==3 then
+	elseif currentPage == 3 then
 		DrawPage3()
-	elseif GetInt("savegame.mod.combined.options_page")==4 then
+	elseif currentPage == 4 then
 		DrawPage4()
-	elseif GetInt("savegame.mod.combined.options_page")==5 then
+	elseif currentPage == 5 then
 		DrawPage5()
-	elseif GetInt("savegame.mod.combined.options_page")==6 then
+	elseif currentPage == 6 then
 		DrawPage6()
-	elseif GetInt("savegame.mod.combined.options_page")==7 then
+	elseif currentPage == 7 then
 		DrawPage7()
 	end
 
@@ -569,176 +363,22 @@ end
 
 -- Persist all known options to registry (reads current values and writes them back)
 function saveSettings()
-	-- Main toggles
-	SetBool("savegame.mod.combined.Tog_FPSC", GetBool("savegame.mod.combined.Tog_FPSC"))
-	SetBool("savegame.mod.combined.Tog_DUST", GetBool("savegame.mod.combined.Tog_DUST"))
-	SetBool("savegame.mod.combined.Tog_CRUMBLE", GetBool("savegame.mod.combined.Tog_CRUMBLE"))
-	SetBool("savegame.mod.combined.Tog_RUMBLE", GetBool("savegame.mod.combined.Tog_RUMBLE"))
-	SetBool("savegame.mod.combined.Tog_FORCE", GetBool("savegame.mod.combined.Tog_FORCE"))
-	SetBool("savegame.mod.combined.Tog_FIRE", GetBool("savegame.mod.combined.Tog_FIRE"))
-	SetBool("savegame.mod.combined.Tog_VIOLENCE", GetBool("savegame.mod.combined.Tog_VIOLENCE"))
-	SetBool("savegame.mod.combined.Tog_DAMSTAT", GetBool("savegame.mod.combined.Tog_DAMSTAT"))
-	SetBool("savegame.mod.combined.Tog_JOINTS", GetBool("savegame.mod.combined.Tog_JOINTS"))
-	SetBool("savegame.mod.combined.Tog_IMPACT", GetBool("savegame.mod.combined.Tog_IMPACT"))
-	SetBool("savegame.mod.combined.Tog_MASS", GetBool("savegame.mod.combined.Tog_MASS"))
+	-- Prefer canonical SaveAllSettings if available (keeps one source of truth)
+	if SaveAllSettings then
+		pcall(SaveAllSettings)
+		savedPopupExpire = GetTime() + 1.5
+		return
+	end
 
-	-- FPS Control
-	SetBool("savegame.mod.combined.FPS_DynLights", GetBool("savegame.mod.combined.FPS_DynLights"))
-	SetBool("savegame.mod.combined.Tog_SDF", GetBool("savegame.mod.combined.Tog_SDF"))
-	SetBool("savegame.mod.combined.Tog_LFF", GetBool("savegame.mod.combined.Tog_LFF"))
-	SetBool("savegame.mod.combined.Tog_DBF", GetBool("savegame.mod.combined.Tog_DBF"))
-	SetInt("savegame.mod.combined.FPS_SDF", GetInt("savegame.mod.combined.FPS_SDF"))
-	SetInt("savegame.mod.combined.FPS_LFF", GetInt("savegame.mod.combined.FPS_LFF"))
-	SetInt("savegame.mod.combined.FPS_DBF", GetInt("savegame.mod.combined.FPS_DBF"))
-	SetInt("savegame.mod.combined.FPS_DBF_size", GetInt("savegame.mod.combined.FPS_DBF_size"))
-	SetBool("savegame.mod.combined.FPS_DBF_FPSB", GetBool("savegame.mod.combined.FPS_DBF_FPSB"))
-	SetInt("savegame.mod.combined.FPS_SDF_agg", GetInt("savegame.mod.combined.FPS_SDF_agg"))
-	SetInt("savegame.mod.combined.FPS_LFF_agg", GetInt("savegame.mod.combined.FPS_LFF_agg"))
-	SetInt("savegame.mod.combined.FPS_DBF_agg", GetInt("savegame.mod.combined.FPS_DBF_agg"))
-	SetInt("savegame.mod.combined.FPS_Targ", GetInt("savegame.mod.combined.FPS_Targ"))
-	SetInt("savegame.mod.combined.FPS_Agg", GetInt("savegame.mod.combined.FPS_Agg"))
-
-	-- Dust Control
-	SetInt("savegame.mod.combined.dust_amt", GetInt("savegame.mod.combined.dust_amt"))
-	SetInt("savegame.mod.combined.dust_size", GetInt("savegame.mod.combined.dust_size"))
-	SetInt("savegame.mod.combined.dust_sizernd", GetInt("savegame.mod.combined.dust_sizernd"))
-	SetInt("savegame.mod.combined.dust_MsBsSz", GetInt("savegame.mod.combined.dust_MsBsSz"))
-	SetInt("savegame.mod.combined.dust_grav", GetInt("savegame.mod.combined.dust_grav"))
-	SetInt("savegame.mod.combined.dust_drag", GetInt("savegame.mod.combined.dust_drag"))
-	SetInt("savegame.mod.combined.dust_life", GetInt("savegame.mod.combined.dust_life"))
-	SetInt("savegame.mod.combined.dust_lifernd", GetInt("savegame.mod.combined.dust_lifernd"))
-	SetInt("savegame.mod.combined.dust_MsBsLf", GetInt("savegame.mod.combined.dust_MsBsLf"))
-	SetInt("savegame.mod.combined.dust_minMass", GetInt("savegame.mod.combined.dust_minMass"))
-	SetInt("savegame.mod.combined.dust_minSpeed", GetInt("savegame.mod.combined.dust_minSpeed"))
-	SetInt("savegame.mod.combined.dust_startsize", GetInt("savegame.mod.combined.dust_startsize"))
-	SetInt("savegame.mod.combined.dust_fader", GetInt("savegame.mod.combined.dust_fader"))
-
-	-- Crumbling
-	SetBool("savegame.mod.combined.tog_crum", GetBool("savegame.mod.combined.tog_crum"))
-	SetInt("savegame.mod.combined.tog_crum_MODE", GetInt("savegame.mod.combined.tog_crum_MODE"))
-	SetInt("savegame.mod.combined.tog_crum_Source", GetInt("savegame.mod.combined.tog_crum_Source"))
-	SetInt("savegame.mod.combined.crum_DMGLight", GetInt("savegame.mod.combined.crum_DMGLight"))
-	SetInt("savegame.mod.combined.crum_DMGMed", GetInt("savegame.mod.combined.crum_DMGMed"))
-	SetInt("savegame.mod.combined.crum_DMGHeavy", GetInt("savegame.mod.combined.crum_DMGHeavy"))
-	SetInt("savegame.mod.combined.crum_spd", GetInt("savegame.mod.combined.crum_spd"))
-	SetFloat("savegame.mod.combined.crum_spdRND", GetFloat("savegame.mod.combined.crum_spdRND"))
-	SetInt("savegame.mod.combined.crum_dist", GetInt("savegame.mod.combined.crum_dist"))
-	SetBool("savegame.mod.combined.vehicles_crumble", GetBool("savegame.mod.combined.vehicles_crumble"))
-	SetInt("savegame.mod.combined.crum_HoleControl", GetInt("savegame.mod.combined.crum_HoleControl"))
-	SetFloat("savegame.mod.combined.crum_BreakTime", GetFloat("savegame.mod.combined.crum_BreakTime"))
-	SetInt("savegame.mod.combined.crum_distFromPlyr", GetInt("savegame.mod.combined.crum_distFromPlyr"))
-	SetInt("savegame.mod.combined.crum_MinMass", GetInt("savegame.mod.combined.crum_MinMass"))
-	SetInt("savegame.mod.combined.crum_MaxMass", GetInt("savegame.mod.combined.crum_MaxMass"))
-	SetFloat("savegame.mod.combined.crum_MinSpd", GetFloat("savegame.mod.combined.crum_MinSpd"))
-	SetFloat("savegame.mod.combined.crum_MaxSpd", GetFloat("savegame.mod.combined.crum_MaxSpd"))
-
-	-- Explosions
-	SetFloat("savegame.mod.combined.xplo_szBase", GetFloat("savegame.mod.combined.xplo_szBase"))
-	SetFloat("savegame.mod.combined.xplo_szRND", GetFloat("savegame.mod.combined.xplo_szRND"))
-	SetFloat("savegame.mod.combined.xplo_szMBV", GetFloat("savegame.mod.combined.xplo_szMBV"))
-	SetInt("savegame.mod.combined.xplo_chance", GetInt("savegame.mod.combined.xplo_chance"))
-	SetInt("savegame.mod.combined.xplo_HoleControl", GetInt("savegame.mod.combined.xplo_HoleControl"))
-	SetFloat("savegame.mod.combined.xplo_BreakTime", GetFloat("savegame.mod.combined.xplo_BreakTime"))
-	SetInt("savegame.mod.combined.xplo_distFromPlyr", GetInt("savegame.mod.combined.xplo_distFromPlyr"))
-	SetInt("savegame.mod.combined.xplo_MinMass", GetInt("savegame.mod.combined.xplo_MinMass"))
-	SetInt("savegame.mod.combined.xplo_MaxMass", GetInt("savegame.mod.combined.xplo_MaxMass"))
-	SetFloat("savegame.mod.combined.xplo_MinSpd", GetFloat("savegame.mod.combined.xplo_MinSpd"))
-	SetFloat("savegame.mod.combined.xplo_MaxSpd", GetFloat("savegame.mod.combined.xplo_MaxSpd"))
-	SetInt("savegame.mod.combined.xplo_SmokeAMT", GetInt("savegame.mod.combined.xplo_SmokeAMT"))
-	SetInt("savegame.mod.combined.xplo_LifeAMT", GetInt("savegame.mod.combined.xplo_LifeAMT"))
-	SetInt("savegame.mod.combined.xplo_Pressure", GetInt("savegame.mod.combined.xplo_Pressure"))
-	SetInt("savegame.mod.combined.xplo_mode", GetInt("savegame.mod.combined.xplo_mode"))
-
-	-- IBSIT
-	SetInt("savegame.mod.combined.ibsit_momentum", GetInt("savegame.mod.combined.ibsit_momentum"))
-	SetInt("savegame.mod.combined.ibsit_dust_amt", GetInt("savegame.mod.combined.ibsit_dust_amt"))
-	SetInt("savegame.mod.combined.ibsit_wood_size", GetInt("savegame.mod.combined.ibsit_wood_size"))
-	SetInt("savegame.mod.combined.ibsit_stone_size", GetInt("savegame.mod.combined.ibsit_stone_size"))
-	SetInt("savegame.mod.combined.ibsit_metal_size", GetInt("savegame.mod.combined.ibsit_metal_size"))
-	SetBool("savegame.mod.combined.ibsit_haptic", GetBool("savegame.mod.combined.ibsit_haptic"))
-	SetBool("savegame.mod.combined.ibsit_sounds", GetBool("savegame.mod.combined.ibsit_sounds"))
-	SetBool("savegame.mod.combined.ibsit_particles", GetBool("savegame.mod.combined.ibsit_particles"))
-	SetBool("savegame.mod.combined.ibsit_vehicle", GetBool("savegame.mod.combined.ibsit_vehicle"))
-	SetBool("savegame.mod.combined.ibsit_joint", GetBool("savegame.mod.combined.ibsit_joint"))
-	SetBool("savegame.mod.combined.ibsit_protection", GetBool("savegame.mod.combined.ibsit_protection"))
-	SetFloat("savegame.mod.combined.ibsit_volume", GetFloat("savegame.mod.combined.ibsit_volume"))
-	SetInt("savegame.mod.combined.ibsit_particle_quality", GetInt("savegame.mod.combined.ibsit_particle_quality"))
-	SetBool("savegame.mod.combined.ibsit_gravity_collapse", GetBool("savegame.mod.combined.ibsit_gravity_collapse"))
-	SetFloat("savegame.mod.combined.ibsit_collapse_threshold", GetFloat("savegame.mod.combined.ibsit_collapse_threshold"))
-	SetFloat("savegame.mod.combined.ibsit_gravity_force", GetFloat("savegame.mod.combined.ibsit_gravity_force"))
-	SetBool("savegame.mod.combined.ibsit_debris_cleanup", GetBool("savegame.mod.combined.ibsit_debris_cleanup"))
-	SetFloat("savegame.mod.combined.ibsit_cleanup_delay", GetFloat("savegame.mod.combined.ibsit_cleanup_delay"))
-	SetBool("savegame.mod.combined.ibsit_fps_optimization", GetBool("savegame.mod.combined.ibsit_fps_optimization"))
-	SetInt("savegame.mod.combined.ibsit_target_fps", GetInt("savegame.mod.combined.ibsit_target_fps"))
-	SetFloat("savegame.mod.combined.ibsit_performance_scale", GetFloat("savegame.mod.combined.ibsit_performance_scale"))
-
-	-- MBCS
-	SetInt("savegame.mod.combined.mbcs_mass", GetInt("savegame.mod.combined.mbcs_mass"))
-	SetInt("savegame.mod.combined.mbcs_distance", GetInt("savegame.mod.combined.mbcs_distance"))
-	SetInt("savegame.mod.combined.mbcs_dust_amt", GetInt("savegame.mod.combined.mbcs_dust_amt"))
-	SetInt("savegame.mod.combined.mbcs_wood_size", GetInt("savegame.mod.combined.mbcs_wood_size"))
-	SetInt("savegame.mod.combined.mbcs_stone_size", GetInt("savegame.mod.combined.mbcs_stone_size"))
-	SetInt("savegame.mod.combined.mbcs_metal_size", GetInt("savegame.mod.combined.mbcs_metal_size"))
-
-	-- Force & Wind
-	SetInt("savegame.mod.combined.force_method", GetInt("savegame.mod.combined.force_method"))
-	SetFloat("savegame.mod.combined.force_gamecontrols", GetFloat("savegame.mod.combined.force_gamecontrols"))
-	SetFloat("savegame.mod.combined.force_radius", GetFloat("savegame.mod.combined.force_radius"))
-	SetFloat("savegame.mod.combined.force_maxmass", GetFloat("savegame.mod.combined.force_maxmass"))
-	SetFloat("savegame.mod.combined.force_minmass", GetFloat("savegame.mod.combined.force_minmass"))
-	SetFloat("savegame.mod.combined.force_strength", GetFloat("savegame.mod.combined.force_strength"))
-	SetFloat("savegame.mod.combined.force_boost", GetFloat("savegame.mod.combined.force_boost"))
-	SetBool("savegame.mod.combined.force_EdgeFade", GetBool("savegame.mod.combined.force_EdgeFade"))
-	SetBool("savegame.mod.combined.force_START_ON", GetBool("savegame.mod.combined.force_START_ON"))
-	SetBool("savegame.mod.combined.force_ENABLE_CONTROLS", GetBool("savegame.mod.combined.force_ENABLE_CONTROLS"))
-	SetBool("savegame.mod.combined.force_Showcross", GetBool("savegame.mod.combined.force_Showcross"))
-	SetBool("savegame.mod.combined.force_CONTROL_TIPS", GetBool("savegame.mod.combined.force_CONTROL_TIPS"))
-	SetFloat("savegame.mod.combined.force_cycle", GetFloat("savegame.mod.combined.force_cycle"))
-	SetFloat("savegame.mod.combined.force_largemass_accellerator", GetFloat("savegame.mod.combined.force_largemass_accellerator"))
-	SetFloat("savegame.mod.combined.force_upforce", GetFloat("savegame.mod.combined.force_upforce"))
-	SetFloat("savegame.mod.combined.force_effect_on_player", GetFloat("savegame.mod.combined.force_effect_on_player"))
-	SetFloat("savegame.mod.combined.force_rotational", GetFloat("savegame.mod.combined.force_rotational"))
-	SetFloat("savegame.mod.combined.force_warmup", GetFloat("savegame.mod.combined.force_warmup"))
-
-	-- Fire
-	SetInt("savegame.mod.combined.fyr_mode", GetInt("savegame.mod.combined.fyr_mode"))
-	SetInt("savegame.mod.combined.fyr_maxrad", GetInt("savegame.mod.combined.fyr_maxrad"))
-	SetInt("savegame.mod.combined.fyr_minrad", GetInt("savegame.mod.combined.fyr_minrad"))
-	SetInt("savegame.mod.combined.fyr_chance", GetInt("savegame.mod.combined.fyr_chance"))
-	SetInt("savegame.mod.combined.fyr_maxmass", GetInt("savegame.mod.combined.fyr_maxmass"))
-	SetInt("savegame.mod.combined.fyr_minmass", GetInt("savegame.mod.combined.fyr_minmass"))
-
-	-- Violence / Joint / Damage stats
-	SetInt("savegame.mod.combined.VIOL_mode", GetInt("savegame.mod.combined.VIOL_mode"))
-	SetInt("savegame.mod.combined.VIOL_Chance", GetInt("savegame.mod.combined.VIOL_Chance"))
-	SetInt("savegame.mod.combined.VIOL_mover", GetInt("savegame.mod.combined.VIOL_mover"))
-	SetInt("savegame.mod.combined.VIOL_turnr", GetInt("savegame.mod.combined.VIOL_turnr"))
-	SetInt("savegame.mod.combined.VIOL_minmass", GetInt("savegame.mod.combined.VIOL_minmass"))
-	SetInt("savegame.mod.combined.VIOL_maxmass", GetInt("savegame.mod.combined.VIOL_maxmass"))
-	SetInt("savegame.mod.combined.VIOL_maxdist", GetInt("savegame.mod.combined.VIOL_maxdist"))
-	SetInt("savegame.mod.combined.JOINT_Source", GetInt("savegame.mod.combined.JOINT_Source"))
-	SetInt("savegame.mod.combined.JOINT_Range", GetInt("savegame.mod.combined.JOINT_Range"))
-	SetInt("savegame.mod.combined.JOINT_Chance", GetInt("savegame.mod.combined.JOINT_Chance"))
-	SetInt("savegame.mod.combined.DAMSTAT_Currency", GetInt("savegame.mod.combined.DAMSTAT_Currency"))
-
-	-- Scanner defaults & extras
-	SetFloat("savegame.mod.combined.scanner_cell", GetFloat("savegame.mod.combined.scanner_cell"))
-	SetInt("savegame.mod.combined.scanner_iter", GetInt("savegame.mod.combined.scanner_iter"))
-	SetFloat("savegame.mod.combined.scanner_factor", GetFloat("savegame.mod.combined.scanner_factor"))
-	SetFloat("savegame.mod.combined.scanner_pad", GetFloat("savegame.mod.combined.scanner_pad"))
-	SetFloat("savegame.mod.combined.scanner_threshold", GetFloat("savegame.mod.combined.scanner_threshold"))
-	SetBool("savegame.mod.combined.scanner_autobreak", GetBool("savegame.mod.combined.scanner_autobreak"))
-	SetFloat("savegame.mod.combined.scanner_cooldown", GetFloat("savegame.mod.combined.scanner_cooldown"))
-	SetBool("savegame.mod.combined.scanner_show_legend", GetBool("savegame.mod.combined.scanner_show_legend"))
-	SetBool("savegame.mod.combined.scanner_show_numbers", GetBool("savegame.mod.combined.scanner_show_numbers"))
-	SetInt("savegame.mod.combined.scanner_max_breaks_per_tick", GetInt("savegame.mod.combined.scanner_max_breaks_per_tick"))
+	-- Minimal fallback: only persist the current options page index so UI state survives without
+	-- the main saver. All other keys are written by SaveAllSettings in main.lua.
+	if SetInt then
+		SetInt("savegame.mod.combined.options_page", GetInt("savegame.mod.combined.options_page"))
+	end
+	savedPopupExpire = GetTime() + 1.5
 end
 
--- Finalize scanner toggle persistence (extra explicit writes)
-SetBool("savegame.mod.combined.scanner_autobreak", GetBool("savegame.mod.combined.scanner_autobreak"))
-SetBool("savegame.mod.combined.scanner_show_numbers", GetBool("savegame.mod.combined.scanner_show_numbers"))
-SetBool("savegame.mod.combined.scanner_show_legend", GetBool("savegame.mod.combined.scanner_show_legend"))
-SetInt("savegame.mod.combined.scanner_max_breaks_per_tick", GetInt("savegame.mod.combined.scanner_max_breaks_per_tick"))
+-- Scanner persistence is handled centrally in defaults.lua / SaveAllSettings()
 
 function DrawPage1()
 	UiFont("regular.ttf", 38)
