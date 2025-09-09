@@ -6,6 +6,9 @@
 local toolActive = false
 local scannerEnabled = false
 local showScanner = false
+local toastUntil = 0
+local toastText = ""
+local toggleSnd = nil
 
 -- Visualization settings
 local STRESS_COLOR_LOW = {r=0, g=1, b=0, a=0.5}
@@ -43,6 +46,13 @@ function integrity_scanner_init()
     end
     -- Respect saved setting for scanner behavior
     scannerEnabled = GetBool("savegame.mod.combined.tool.integrity_scanner.enabled")
+
+    -- Load a simple toggle sound if available in this mod (low volume)
+    -- Using existing asset in repo as a placeholder so there's no missing file
+    local ok, snd = pcall(function() return LoadSound("pdm/data/WindNoise/WindOgg.ogg") end)
+    if ok and snd then
+        toggleSnd = snd
+    end
 end
 
 function integrity_scanner_tick(dt)
@@ -58,8 +68,8 @@ function integrity_scanner_tick(dt)
     local showNumbers = GetBool("savegame.mod.combined.scanner_show_numbers")
     local maxBreaks = GetInt("savegame.mod.combined.scanner_max_breaks_per_tick")
 
-    -- Track whether the scanner is the currently selected tool (detect selection even if scanner disabled)
-    local currentTool = GetTool()
+    -- Track whether the scanner is the currently selected tool (using Teardown API registry)
+    local currentTool = GetString("game.player.tool")
     toolActive = (currentTool == "integrity_scanner")
 
     -- Update scannerEnabled (saved preference) but do NOT early-return if the tool is actively selected.
@@ -73,13 +83,16 @@ function integrity_scanner_tick(dt)
     end
 
     -- Toggle visualization with LMB while the tool is active
-    -- Toggle visualization with LMB while the tool is active
     -- Also accept 'g' as a fallback hotkey in case LMB is consumed by UI
     if toolActive and (InputPressed("lmb") or InputPressed("g")) then
-        SetBool("savegame.mod.combined.tool.integrity_scanner.enabled", true)
-        DebugPrint("Scanner: LMB or G pressed, toggling overlay")
-        -- showScanner = not showScanner
-        showScanner = GetBool("savegame.mod.combined.tool.integrity_scanner.enabled")
+        showScanner = not showScanner
+        DebugPrint("Scanner overlay: " .. (showScanner and "ON" or "OFF"))
+        toastText = showScanner and "Scanner ON" or "Scanner OFF"
+        toastUntil = GetTime() + 1.2
+        if toggleSnd then
+            -- Play quietly to avoid being intrusive
+            PlaySound(toggleSnd, nil, 0.2)
+        end
         if showScanner then
             buildStructuralGraph()
             calculateStress(false, maxBreaks)
@@ -105,6 +118,19 @@ function integrity_scanner_draw()
 
     if toolActive and showScanner then
         drawStressVisuals()
+    end
+
+    -- Toast message for ON/OFF
+    if toastUntil > GetTime() then
+        UiPush()
+        UiAlign("center middle")
+        UiFont("bold.ttf", 20)
+        UiTranslate(UiWidth()/2, UiHeight()*0.85)
+        UiColor(0,0,0,0.6)
+        UiRect(200, 34)
+        UiColor(1,1,1)
+        UiText(toastText)
+        UiPop()
     end
 end
 
@@ -207,7 +233,7 @@ function buildStructuralGraph()
     end
 end
 
-function calculateStress(autoBreak)
+function calculateStress(autoBreak, overrideMaxPerTick)
     -- First-pass stress propagation: treat body mass as weight and propagate downward
     bodyStress = {}
     bodyLoad = {}
@@ -281,7 +307,11 @@ function calculateStress(autoBreak)
     if autoBreak == nil then autoBreak = GetBool("savegame.mod.combined.scanner_autobreak") end
     -- allow caller to pass in a cap for max breaks per tick
     local maxPerTick = 3
-    if GetInt then maxPerTick = GetInt("savegame.mod.combined.scanner_max_breaks_per_tick") or maxPerTick end
+    if overrideMaxPerTick ~= nil then
+        maxPerTick = overrideMaxPerTick
+    elseif GetInt then
+        maxPerTick = GetInt("savegame.mod.combined.scanner_max_breaks_per_tick") or maxPerTick
+    end
     if autoBreak then
         local now = GetTime()
         local breaksThisTick = 0

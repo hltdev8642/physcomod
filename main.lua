@@ -20,8 +20,9 @@ local last_broken_time = GetTime() + 5
 
 -- FPS counter
 local framesPerSecond = 0
+local frames = 0
 local perry = 1
-
+local FPS_marker = 0
 -- Other
 local hideHud = false
 
