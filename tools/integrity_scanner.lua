@@ -32,13 +32,20 @@ local BREAK_COOLDOWN = 8.0 -- seconds between automated breaks per body
 
 function integrity_scanner_init()
     -- Register the tool
-    RegisterTool("integrity_scanner", "Structural Integrity Scanner", "Displays structural stress on buildings.")
-    -- Do not force-enable; respect saved setting
+    RegisterTool("integrity_scanner", "Structural Integrity Scanner", "")
+    -- Also mark the tool as enabled in the global game.tool registry so it shows up in the tool menu
+    SetBool("game.tool.integrity_scanner.enabled", true)
+    DebugPrint("integrity_scanner: registered and enabled in game.tool registry")
+    -- If UMF's tool loader is available, register via that as well so it integrates with other UMF tools
+    if RegisterToolUMF then
+        RegisterToolUMF("integrity_scanner", { printname = "Structural Integrity Scanner", model = "" })
+        DebugPrint("integrity_scanner: also registered via RegisterToolUMF")
+    end
+    -- Respect saved setting for scanner behavior
     scannerEnabled = GetBool("savegame.mod.combined.tool.integrity_scanner.enabled")
 end
 
 function integrity_scanner_tick(dt)
-    scannerEnabled = GetBool("savegame.mod.combined.tool.integrity_scanner.enabled")
     -- read tunables from registry so UI controls affect behavior immediately
     SCANNER_CELL = (GetFloat("savegame.mod.combined.scanner_cell") or SCANNER_CELL)
     SCANNER_ITER = (GetInt("savegame.mod.combined.scanner_iter") or SCANNER_ITER)
@@ -50,12 +57,14 @@ function integrity_scanner_tick(dt)
     local showLegend = GetBool("savegame.mod.combined.scanner_show_legend")
     local showNumbers = GetBool("savegame.mod.combined.scanner_show_numbers")
     local maxBreaks = GetInt("savegame.mod.combined.scanner_max_breaks_per_tick")
-    -- If the scanner is disabled, don't perform work
-    if not scannerEnabled then return end
 
-    -- Track whether the scanner is the currently selected tool
+    -- Track whether the scanner is the currently selected tool (detect selection even if scanner disabled)
     local currentTool = GetTool()
     toolActive = (currentTool == "integrity_scanner")
+
+    -- Update scannerEnabled (saved preference) but do NOT early-return if the tool is actively selected.
+    scannerEnabled = GetBool("savegame.mod.combined.tool.integrity_scanner.enabled")
+    if not scannerEnabled and not toolActive then return end
 
     -- Only build the graph / compute stress when the tool is active or the overlay is already shown
     if toolActive or showScanner then
@@ -64,7 +73,9 @@ function integrity_scanner_tick(dt)
     end
 
     -- Toggle visualization with LMB while the tool is active
-    if toolActive and InputPressed("lmb") then
+    -- Toggle visualization with LMB while the tool is active
+    -- Also accept 'g' as a fallback hotkey in case LMB is consumed by UI
+    if toolActive and (InputPressed("lmb") or InputPressed("g")) then
         showScanner = not showScanner
         if showScanner then
             buildStructuralGraph()
@@ -74,6 +85,21 @@ function integrity_scanner_tick(dt)
 end
 
 function integrity_scanner_draw()
+    if toolActive then
+        -- small debug/status overlay for troubleshooting
+        UiPush()
+        UiFont("regular.ttf", 14)
+        UiAlign("left top")
+        UiTranslate(10, 10)
+        UiColor(1,1,1)
+        UiText("Integrity Scanner")
+        UiTranslate(0, 18)
+        UiText("Enabled: " .. tostring(scannerEnabled))
+        UiTranslate(0, 18)
+        UiText("Overlay: " .. tostring(showScanner) .. "  (toggle: LMB or 'G')")
+        UiPop()
+    end
+
     if toolActive and showScanner then
         drawStressVisuals()
     end

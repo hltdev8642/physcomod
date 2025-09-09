@@ -2,6 +2,7 @@
 #include "slimerand.lua"
 #include "slimegcfunc.lua"
 #include "tools/integrity_scanner.lua"
+#include "tools/gravity_collapse.lua"
 
 -- Combined Physics Destruction Mod
 -- Merges features from PDM (Progressive Destruction), IBSIT (Impact Based), and MBCS (Mass Based)
@@ -885,6 +886,20 @@ function init()
 		SetBool("savegame.mod.combined.Tog_MASS", true)
 	end
 
+	-- Ensure gravity collapse registry defaults exist
+	if not HasKey("savegame.mod.combined.gravitycollapse_sample_count") then SetInt("savegame.mod.combined.gravitycollapse_sample_count", 24) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_check_interval") then SetFloat("savegame.mod.combined.gravitycollapse_check_interval", 0.6) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_min_mass") then SetInt("savegame.mod.combined.gravitycollapse_min_mass", 50) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_debug") then SetBool("savegame.mod.combined.gravitycollapse_debug", false) end
+
+	-- Caching & profiler defaults
+	if not HasKey("savegame.mod.combined.gravitycollapse_cache_grid") then SetFloat("savegame.mod.combined.gravitycollapse_cache_grid", 0.25) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_cache_ttl") then SetFloat("savegame.mod.combined.gravitycollapse_cache_ttl", 1.0) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_profiler") then SetBool("savegame.mod.combined.gravitycollapse_profiler", true) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_profile_interval") then SetFloat("savegame.mod.combined.gravitycollapse_profile_interval", 1.0) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check") then SetBool("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check", false) end
+	if not HasKey("savegame.mod.combined.gravitycollapse_cache_invalidate_pad") then SetFloat("savegame.mod.combined.gravitycollapse_cache_invalidate_pad", 0.05) end
+
 	-- IBSIT initialization (Enhanced v2.0)
 	if TOG_IMPACT then
 		local shapes = GetBodyShapes(GetWorldBody())
@@ -931,6 +946,9 @@ function init()
 	end
 
 	CurrencyPick()
+
+	-- gravity collapse init (safe if module absent)
+	if gravity_collapse_init then pcall(gravity_collapse_init) end
 end
 
 -- Utility functions
@@ -986,6 +1004,9 @@ function draw(dt)
 
 	-- Draw scanner visuals if provided
 	if integrity_scanner_draw then integrity_scanner_draw() end
+
+	-- Draw gravity collapse debug overlay if provided
+	if gravity_collapse_draw then pcall(gravity_collapse_draw) end
 end
 
 -- Tick function - Main game loop
@@ -1042,6 +1063,14 @@ function tick(dt)
 
 	-- Call main functions
 	callFunctions()
+
+	-- gravity collapse tick
+	if gravity_collapse_tick then pcall(gravity_collapse_tick, dt) end
+
+	-- saved popup timer update
+	if savedPopupTimer and savedPopupTimer > 0 then
+		savedPopupTimer = savedPopupTimer - dt
+	end
 
 	-- Run scanner tick
 	if integrity_scanner_tick then integrity_scanner_tick(dt) end
@@ -1400,6 +1429,9 @@ function update()
 			end
 		end
 	end
+
+	-- gravity collapse update
+	if gravity_collapse_update then pcall(gravity_collapse_update, dt) end
 end
 
 -- PostUpdate function
@@ -1630,6 +1662,28 @@ function DrawOptionsMenu()
 end
 
 function DrawPageContent(page)
+
+	-- Caching and profiler controls
+	UiTranslate(0, 40)
+	UiText("Raycast Cache TTL:")
+	UiTranslate(150, 0)
+	local ttl = GetFloat("savegame.mod.combined.gravitycollapse_cache_ttl")
+	UiText(string.format("%.2fs", ttl))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newTtl = UiSlider("dot", "x", (ttl - 0.1) / 9.9, 0, 1) * 9.9 + 0.1
+	if math.abs(newTtl - ttl) > 0.001 then SetFloat("savegame.mod.combined.gravitycollapse_cache_ttl", newTtl) end
+	UiPop()
+
+	UiTranslate(0, 30)
+	UiText("Profiler Overlay:")
+	UiTranslate(150, 0)
+	local prof = GetBool("savegame.mod.combined.gravitycollapse_profiler")
+	if prof then UiColor(0.5,1,0.5) else UiColor(0.7,0.7,0.7) end
+	if UiTextButton("Profiler: " .. (prof and "ON" or "OFF"), 160, 28) then SetBool("savegame.mod.combined.gravitycollapse_profiler", not prof) end
+	UiColor(1,1,1)
+	UiTranslate(-150, 30)
     UiColor(1, 1, 1)
     UiFont("regular.ttf", 20)
 
@@ -1877,9 +1931,231 @@ function DrawAdvancedPage()
 
     -- Reset button
     UiTranslate(0, 200)
-    if UiTextButton("Reset All Settings", 200, 40) then
-        ResetAllSettings()
-    end
+	UiPush()
+	UiTranslate(-110, 200)
+	if UiTextButton("Reset All Settings", 200, 40) then
+		ResetAllSettings()
+	end
+	UiPop()
+
+	UiPush()
+	UiTranslate(130, 200)
+	if UiTextButton("Save Settings", 200, 40) then
+		SaveAllSettings()
+	end
+	UiPop()
+
+	-- Saved popup
+	if savedPopupTimer and savedPopupTimer > 0 then
+		UiPush()
+		UiTranslate(-100, 260)
+		UiColor(0,0,0,0.75)
+		UiRect(220, 40)
+		UiColor(1,1,1)
+		UiTranslate(10, 10)
+		UiText("Saved!")
+		UiPop()
+	end
+end
+
+-- Reset all settings to sane defaults for this mod
+function ResetAllSettings()
+	-- Feature toggles defaults
+	SetBool("savegame.mod.combined.Tog_FPSC", false)
+	SetBool("savegame.mod.combined.Tog_DUST", false)
+	SetBool("savegame.mod.combined.Tog_CRUMBLE", true)
+	SetBool("savegame.mod.combined.Tog_RUMBLE", false)
+	SetBool("savegame.mod.combined.Tog_FORCE", false)
+	SetBool("savegame.mod.combined.Tog_FIRE", false)
+	SetBool("savegame.mod.combined.Tog_VIOLENCE", false)
+	SetBool("savegame.mod.combined.Tog_DAMSTAT", false)
+	SetBool("savegame.mod.combined.Tog_JOINTS", false)
+	SetBool("savegame.mod.combined.Tog_IMPACT", true)
+	SetBool("savegame.mod.combined.Tog_MASS", true)
+
+	-- IBSIT core defaults
+	SetInt("savegame.mod.combined.ibsit_momentum", 20)
+	SetInt("savegame.mod.combined.ibsit_dust_amt", 10)
+	SetInt("savegame.mod.combined.ibsit_wood_size", 100)
+	SetInt("savegame.mod.combined.ibsit_stone_size", 100)
+	SetInt("savegame.mod.combined.ibsit_metal_size", 100)
+	SetBool("savegame.mod.combined.ibsit_haptic", false)
+	SetBool("savegame.mod.combined.ibsit_sounds", false)
+	SetBool("savegame.mod.combined.ibsit_particles", true)
+	SetBool("savegame.mod.combined.ibsit_vehicle", false)
+	SetBool("savegame.mod.combined.ibsit_joint", false)
+	SetBool("savegame.mod.combined.ibsit_protection", false)
+	SetFloat("savegame.mod.combined.ibsit_volume", 1.0)
+	SetInt("savegame.mod.combined.ibsit_particle_quality", 1)
+
+	-- Gravity collapse defaults (including joint/cache/profiler keys)
+	SetBool("savegame.mod.combined.ibsit_gravity_collapse", true)
+	SetFloat("savegame.mod.combined.ibsit_collapse_threshold", 0.5)
+	SetFloat("savegame.mod.combined.ibsit_gravity_force", 9.81)
+	SetInt("savegame.mod.combined.gravitycollapse_sample_count", 24)
+	SetFloat("savegame.mod.combined.gravitycollapse_check_interval", 0.6)
+	SetInt("savegame.mod.combined.gravitycollapse_min_mass", 50)
+	SetBool("savegame.mod.combined.gravitycollapse_debug", false)
+	SetBool("savegame.mod.combined.gravitycollapse_joint_credit", true)
+	SetInt("savegame.mod.combined.gravitycollapse_joint_depth", 6)
+	SetInt("savegame.mod.combined.gravitycollapse_joint_mass_threshold", 100)
+	SetInt("savegame.mod.combined.gravitycollapse_min_samples", 6)
+	SetInt("savegame.mod.combined.gravitycollapse_max_samples", 64)
+	SetFloat("savegame.mod.combined.gravitycollapse_cache_grid", 0.25)
+	SetFloat("savegame.mod.combined.gravitycollapse_cache_ttl", 1.0)
+	SetBool("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check", false)
+	SetFloat("savegame.mod.combined.gravitycollapse_cache_invalidate_pad", 0.05)
+	SetBool("savegame.mod.combined.gravitycollapse_profiler", true)
+	SetFloat("savegame.mod.combined.gravitycollapse_profile_interval", 1.0)
+
+	-- Misc defaults
+	SetBool("savegame.mod.combined.ibsit_debris_cleanup", false)
+	SetFloat("savegame.mod.combined.ibsit_cleanup_delay", 30.0)
+
+	-- Persist and re-init gravity module if present
+	if gravity_collapse_init then pcall(gravity_collapse_init) end
+end
+
+-- transient popup timer for saved confirmation
+local savedPopupTimer = 0
+
+-- SaveAllSettings: explicitly write current UI/read values to registry
+function SaveAllSettings()
+	-- write core toggles (read back current values where applicable)
+	SetBool("savegame.mod.combined.Tog_FPSC", GetBool("savegame.mod.combined.Tog_FPSC"))
+	SetBool("savegame.mod.combined.Tog_DUST", GetBool("savegame.mod.combined.Tog_DUST"))
+	SetBool("savegame.mod.combined.Tog_CRUMBLE", GetBool("savegame.mod.combined.Tog_CRUMBLE"))
+	SetBool("savegame.mod.combined.Tog_RUMBLE", GetBool("savegame.mod.combined.Tog_RUMBLE"))
+	SetBool("savegame.mod.combined.Tog_FORCE", GetBool("savegame.mod.combined.Tog_FORCE"))
+	SetBool("savegame.mod.combined.Tog_FIRE", GetBool("savegame.mod.combined.Tog_FIRE"))
+	SetBool("savegame.mod.combined.Tog_VIOLENCE", GetBool("savegame.mod.combined.Tog_VIOLENCE"))
+	SetBool("savegame.mod.combined.Tog_DAMSTAT", GetBool("savegame.mod.combined.Tog_DAMSTAT"))
+	SetBool("savegame.mod.combined.Tog_JOINTS", GetBool("savegame.mod.combined.Tog_JOINTS"))
+	SetBool("savegame.mod.combined.Tog_IMPACT", GetBool("savegame.mod.combined.Tog_IMPACT"))
+	SetBool("savegame.mod.combined.Tog_MASS", GetBool("savegame.mod.combined.Tog_MASS"))
+	SetBool("savegame.mod.combined.Tog_SDF", GetBool("savegame.mod.combined.Tog_SDF"))
+	SetBool("savegame.mod.combined.Tog_LFF", GetBool("savegame.mod.combined.Tog_LFF"))
+	SetBool("savegame.mod.combined.Tog_DBF", GetBool("savegame.mod.combined.Tog_DBF"))
+
+	-- FPS / performance toggles
+	SetBool("savegame.mod.combined.FPS_DynLights", GetBool("savegame.mod.combined.FPS_DynLights"))
+	SetInt("savegame.mod.combined.FPS_SDF", GetInt("savegame.mod.combined.FPS_SDF"))
+	SetInt("savegame.mod.combined.FPS_LFF", GetInt("savegame.mod.combined.FPS_LFF"))
+	SetInt("savegame.mod.combined.FPS_DBF", GetInt("savegame.mod.combined.FPS_DBF"))
+	SetBool("savegame.mod.combined.FPS_DBF_FPSB", GetBool("savegame.mod.combined.FPS_DBF_FPSB"))
+	SetInt("savegame.mod.combined.FPS_Targ", GetInt("savegame.mod.combined.FPS_Targ"))
+	SetInt("savegame.mod.combined.FPS_Agg", GetInt("savegame.mod.combined.FPS_Agg"))
+
+	-- IBSIT settings
+	SetInt("savegame.mod.combined.ibsit_momentum", GetInt("savegame.mod.combined.ibsit_momentum"))
+	SetInt("savegame.mod.combined.ibsit_dust_amt", GetInt("savegame.mod.combined.ibsit_dust_amt"))
+	SetInt("savegame.mod.combined.ibsit_wood_size", GetInt("savegame.mod.combined.ibsit_wood_size"))
+	SetInt("savegame.mod.combined.ibsit_stone_size", GetInt("savegame.mod.combined.ibsit_stone_size"))
+	SetInt("savegame.mod.combined.ibsit_metal_size", GetInt("savegame.mod.combined.ibsit_metal_size"))
+	SetBool("savegame.mod.combined.ibsit_haptic", GetBool("savegame.mod.combined.ibsit_haptic"))
+	SetBool("savegame.mod.combined.ibsit_sounds", GetBool("savegame.mod.combined.ibsit_sounds"))
+	SetBool("savegame.mod.combined.ibsit_particles", GetBool("savegame.mod.combined.ibsit_particles"))
+	SetBool("savegame.mod.combined.ibsit_vehicle", GetBool("savegame.mod.combined.ibsit_vehicle"))
+	SetBool("savegame.mod.combined.ibsit_joint", GetBool("savegame.mod.combined.ibsit_joint"))
+	SetBool("savegame.mod.combined.ibsit_protection", GetBool("savegame.mod.combined.ibsit_protection"))
+	SetFloat("savegame.mod.combined.ibsit_volume", GetFloat("savegame.mod.combined.ibsit_volume"))
+	SetInt("savegame.mod.combined.ibsit_particle_quality", GetInt("savegame.mod.combined.ibsit_particle_quality"))
+	SetBool("savegame.mod.combined.ibsit_debris_cleanup", GetBool("savegame.mod.combined.ibsit_debris_cleanup"))
+	SetFloat("savegame.mod.combined.ibsit_cleanup_delay", GetFloat("savegame.mod.combined.ibsit_cleanup_delay"))
+
+	-- Gravity collapse settings
+	SetBool("savegame.mod.combined.ibsit_gravity_collapse", GetBool("savegame.mod.combined.ibsit_gravity_collapse"))
+	SetFloat("savegame.mod.combined.ibsit_collapse_threshold", GetFloat("savegame.mod.combined.ibsit_collapse_threshold"))
+	SetFloat("savegame.mod.combined.ibsit_gravity_force", GetFloat("savegame.mod.combined.ibsit_gravity_force"))
+	SetInt("savegame.mod.combined.gravitycollapse_sample_count", GetInt("savegame.mod.combined.gravitycollapse_sample_count"))
+	SetFloat("savegame.mod.combined.gravitycollapse_check_interval", GetFloat("savegame.mod.combined.gravitycollapse_check_interval"))
+	SetInt("savegame.mod.combined.gravitycollapse_min_mass", GetInt("savegame.mod.combined.gravitycollapse_min_mass"))
+	SetBool("savegame.mod.combined.gravitycollapse_debug", GetBool("savegame.mod.combined.gravitycollapse_debug"))
+	SetBool("savegame.mod.combined.gravitycollapse_joint_credit", GetBool("savegame.mod.combined.gravitycollapse_joint_credit"))
+	SetInt("savegame.mod.combined.gravitycollapse_joint_depth", GetInt("savegame.mod.combined.gravitycollapse_joint_depth"))
+	SetInt("savegame.mod.combined.gravitycollapse_joint_mass_threshold", GetInt("savegame.mod.combined.gravitycollapse_joint_mass_threshold"))
+	SetInt("savegame.mod.combined.gravitycollapse_min_samples", GetInt("savegame.mod.combined.gravitycollapse_min_samples"))
+	SetInt("savegame.mod.combined.gravitycollapse_max_samples", GetInt("savegame.mod.combined.gravitycollapse_max_samples"))
+	SetFloat("savegame.mod.combined.gravitycollapse_cache_grid", GetFloat("savegame.mod.combined.gravitycollapse_cache_grid"))
+	SetFloat("savegame.mod.combined.gravitycollapse_cache_ttl", GetFloat("savegame.mod.combined.gravitycollapse_cache_ttl"))
+	SetBool("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check", GetBool("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check"))
+	SetFloat("savegame.mod.combined.gravitycollapse_cache_invalidate_pad", GetFloat("savegame.mod.combined.gravitycollapse_cache_invalidate_pad"))
+	SetBool("savegame.mod.combined.gravitycollapse_profiler", GetBool("savegame.mod.combined.gravitycollapse_profiler"))
+	SetFloat("savegame.mod.combined.gravitycollapse_profile_interval", GetFloat("savegame.mod.combined.gravitycollapse_profile_interval"))
+
+	-- Advanced / miscellaneous keys used in UI pages
+	SetInt("savegame.mod.combined.mbcs_mass", GetInt("savegame.mod.combined.mbcs_mass"))
+	SetInt("savegame.mod.combined.mbcs_distance", GetInt("savegame.mod.combined.mbcs_distance"))
+	SetInt("savegame.mod.combined.mbcs_dust_amt", GetInt("savegame.mod.combined.mbcs_dust_amt"))
+	SetInt("savegame.mod.combined.mbcs_wood_size", GetInt("savegame.mod.combined.mbcs_wood_size"))
+	SetInt("savegame.mod.combined.mbcs_stone_size", GetInt("savegame.mod.combined.mbcs_stone_size"))
+	SetInt("savegame.mod.combined.mbcs_metal_size", GetInt("savegame.mod.combined.mbcs_metal_size"))
+
+	SetInt("savegame.mod.combined.force_method", GetInt("savegame.mod.combined.force_method"))
+	SetInt("savegame.mod.combined.force_strength", GetInt("savegame.mod.combined.force_strength"))
+	SetInt("savegame.mod.combined.force_radius", GetInt("savegame.mod.combined.force_radius"))
+	SetInt("savegame.mod.combined.force_minmass", GetInt("savegame.mod.combined.force_minmass"))
+	SetInt("savegame.mod.combined.force_maxmass", GetInt("savegame.mod.combined.force_maxmass"))
+
+	SetInt("savegame.mod.combined.viol_chance", GetInt("savegame.mod.combined.viol_chance"))
+	SetInt("savegame.mod.combined.viol_mover", GetInt("savegame.mod.combined.viol_mover"))
+	SetInt("savegame.mod.combined.viol_turnr", GetInt("savegame.mod.combined.viol_turnr"))
+	SetInt("savegame.mod.combined.viol_minmass", GetInt("savegame.mod.combined.viol_minmass"))
+	SetInt("savegame.mod.combined.viol_maxmass", GetInt("savegame.mod.combined.viol_maxmass"))
+
+	SetInt("savegame.mod.combined.fyr_chance", GetInt("savegame.mod.combined.fyr_chance"))
+	SetInt("savegame.mod.combined.fyr_minrad", GetInt("savegame.mod.combined.fyr_minrad"))
+	SetInt("savegame.mod.combined.fyr_maxrad", GetInt("savegame.mod.combined.fyr_maxrad"))
+	SetInt("savegame.mod.combined.fyr_minmass", GetInt("savegame.mod.combined.fyr_minmass"))
+	SetInt("savegame.mod.combined.fyr_maxmass", GetInt("savegame.mod.combined.fyr_maxmass"))
+
+	-- Dust specifics
+	SetInt("savegame.mod.combined.dust_amt", GetInt("savegame.mod.combined.dust_amt"))
+	SetInt("savegame.mod.combined.dust_size", GetInt("savegame.mod.combined.dust_size"))
+	SetInt("savegame.mod.combined.dust_sizernd", GetInt("savegame.mod.combined.dust_sizernd"))
+	SetInt("savegame.mod.combined.dust_MsBsSz", GetInt("savegame.mod.combined.dust_MsBsSz"))
+	SetInt("savegame.mod.combined.dust_grav", GetInt("savegame.mod.combined.dust_grav"))
+	SetInt("savegame.mod.combined.dust_drag", GetInt("savegame.mod.combined.dust_drag"))
+	SetInt("savegame.mod.combined.dust_life", GetInt("savegame.mod.combined.dust_life"))
+	SetInt("savegame.mod.combined.dust_lifernd", GetInt("savegame.mod.combined.dust_lifernd"))
+	SetInt("savegame.mod.combined.dust_MsBsLf", GetInt("savegame.mod.combined.dust_MsBsLf"))
+	SetInt("savegame.mod.combined.dust_minMass", GetInt("savegame.mod.combined.dust_minMass"))
+	SetInt("savegame.mod.combined.dust_minSpeed", GetInt("savegame.mod.combined.dust_minSpeed"))
+
+	-- Crumble / explosion keys
+	SetInt("savegame.mod.combined.crum_dist", GetInt("savegame.mod.combined.crum_dist"))
+	SetInt("savegame.mod.combined.crum_spd", GetInt("savegame.mod.combined.crum_spd"))
+	SetInt("savegame.mod.combined.crum_DMGLight", GetInt("savegame.mod.combined.crum_DMGLight"))
+	SetInt("savegame.mod.combined.crum_DMGMed", GetInt("savegame.mod.combined.crum_DMGMed"))
+	SetInt("savegame.mod.combined.crum_DMGHeavy", GetInt("savegame.mod.combined.crum_DMGHeavy"))
+	SetInt("savegame.mod.combined.crum_HoleControl", GetInt("savegame.mod.combined.crum_HoleControl"))
+	SetFloat("savegame.mod.combined.crum_BreakTime", GetFloat("savegame.mod.combined.crum_BreakTime"))
+	SetInt("savegame.mod.combined.crum_distFromPlyr", GetInt("savegame.mod.combined.crum_distFromPlyr"))
+	SetInt("savegame.mod.combined.crum_MinMass", GetInt("savegame.mod.combined.crum_MinMass"))
+	SetInt("savegame.mod.combined.crum_MaxMass", GetInt("savegame.mod.combined.crum_MaxMass"))
+	SetFloat("savegame.mod.combined.crum_MinSpd", GetFloat("savegame.mod.combined.crum_MinSpd"))
+	SetFloat("savegame.mod.combined.crum_MaxSpd", GetFloat("savegame.mod.combined.crum_MaxSpd"))
+
+	SetFloat("savegame.mod.combined.xplo_szBase", GetFloat("savegame.mod.combined.xplo_szBase"))
+	SetFloat("savegame.mod.combined.xplo_szRND", GetFloat("savegame.mod.combined.xplo_szRND"))
+	SetInt("savegame.mod.combined.xplo_chance", GetInt("savegame.mod.combined.xplo_chance"))
+	SetInt("savegame.mod.combined.xplo_HoleControl", GetInt("savegame.mod.combined.xplo_HoleControl"))
+	SetFloat("savegame.mod.combined.xplo_BreakTime", GetFloat("savegame.mod.combined.xplo_BreakTime"))
+	SetInt("savegame.mod.combined.xplo_distFromPlyr", GetInt("savegame.mod.combined.xplo_distFromPlyr"))
+	SetInt("savegame.mod.combined.xplo_MinMass", GetInt("savegame.mod.combined.xplo_MinMass"))
+	SetInt("savegame.mod.combined.xplo_MaxMass", GetInt("savegame.mod.combined.xplo_MaxMass"))
+	SetFloat("savegame.mod.combined.xplo_MinSpd", GetFloat("savegame.mod.combined.xplo_MinSpd"))
+	SetFloat("savegame.mod.combined.xplo_MaxSpd", GetFloat("savegame.mod.combined.xplo_MaxSpd"))
+
+	-- Misc
+	SetBool("savegame.mod.combined.ibsit_debris_cleanup", GetBool("savegame.mod.combined.ibsit_debris_cleanup"))
+	SetFloat("savegame.mod.combined.ibsit_cleanup_delay", GetFloat("savegame.mod.combined.ibsit_cleanup_delay"))
+
+	-- trigger a re-init of gravity module
+	if gravity_collapse_init then pcall(gravity_collapse_init) end
+
+	-- show popup for 1.5s
+	savedPopupTimer = 1.5
 end
 
 function DrawIBSITPage()
@@ -1993,6 +2269,127 @@ function DrawIBSITPage()
     UiTranslate(150, 0)
     local force = GetFloat("savegame.mod.combined.ibsit_gravity_force")
     UiText(string.format("%.1f", force))
+
+	-- Gravity collapse advanced tunables (prototype)
+	UiTranslate(0, 40)
+	UiText("Sample Count:")
+	UiTranslate(150, 0)
+	local sc = GetInt("savegame.mod.combined.gravitycollapse_sample_count")
+	UiText(tostring(sc))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newSc = math.floor(UiSlider("dot", "x", sc / 128, 0, 128) * 128)
+	if newSc ~= sc then SetInt("savegame.mod.combined.gravitycollapse_sample_count", newSc) end
+	UiPop()
+
+	UiTranslate(0, 30)
+	UiText("Check Interval (s):")
+	UiTranslate(150, 0)
+	local ci = GetFloat("savegame.mod.combined.gravitycollapse_check_interval")
+	UiText(string.format("%.2f", ci))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newCi = UiSlider("dot", "x", (ci - 0.1) / 4.9, 0, 1) * 4.9 + 0.1
+	if math.abs(newCi - ci) > 0.001 then SetFloat("savegame.mod.combined.gravitycollapse_check_interval", newCi) end
+	UiPop()
+
+	UiTranslate(0, 30)
+	UiText("Min Body Mass:")
+	UiTranslate(150, 0)
+	local mm = GetInt("savegame.mod.combined.gravitycollapse_min_mass")
+	UiText(tostring(mm))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newMm = math.floor(UiSlider("dot", "x", mm / 5000, 0, 1) * 5000)
+	if newMm ~= mm then SetInt("savegame.mod.combined.gravitycollapse_min_mass", newMm) end
+	UiPop()
+
+	UiTranslate(0, 30)
+	UiText("Debug Overlay:")
+	UiTranslate(150, 0)
+	local dbg = GetBool("savegame.mod.combined.gravitycollapse_debug")
+	if dbg then UiColor(0.5, 1, 0.5) else UiColor(0.7,0.7,0.7) end
+	if UiTextButton("Debug: " .. (dbg and "ON" or "OFF"), 160, 28) then SetBool("savegame.mod.combined.gravitycollapse_debug", not dbg) end
+	UiColor(1,1,1)
+	UiTranslate(-150, 30)
+
+	UiTranslate(0, 10)
+	UiText("Joint Support Credit:")
+	UiTranslate(150, 0)
+	local jc = GetBool("savegame.mod.combined.gravitycollapse_joint_credit")
+	if jc then UiColor(0.5,1,0.5) else UiColor(0.7,0.7,0.7) end
+	if UiTextButton("Joint Credit: " .. (jc and "ON" or "OFF"), 160, 28) then SetBool("savegame.mod.combined.gravitycollapse_joint_credit", not jc) end
+	UiColor(1,1,1)
+	UiTranslate(-150, 30)
+
+	UiTranslate(0, 0)
+	UiText("Min Samples:")
+	UiTranslate(150, 0)
+	local mins = GetInt("savegame.mod.combined.gravitycollapse_min_samples")
+	UiText(tostring(mins))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newMin = math.floor(UiSlider("dot", "x", mins / 64, 0, 64) * 64)
+	if newMin ~= mins then SetInt("savegame.mod.combined.gravitycollapse_min_samples", newMin) end
+	UiPop()
+
+	UiTranslate(0, 0)
+	UiText("Max Samples:")
+	UiTranslate(150, 0)
+	local maxs = GetInt("savegame.mod.combined.gravitycollapse_max_samples")
+	UiText(tostring(maxs))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newMax = math.floor(UiSlider("dot", "x", maxs / 256, 0, 256) * 256)
+	if newMax ~= maxs then SetInt("savegame.mod.combined.gravitycollapse_max_samples", newMax) end
+	UiPop()
+
+	UiTranslate(0, 0)
+	UiText("Cache Grid (m):")
+	UiTranslate(150, 0)
+	local grid = GetFloat("savegame.mod.combined.gravitycollapse_cache_grid")
+	UiText(string.format("%.2f", grid))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newGrid = UiSlider("dot", "x", (grid - 0.05) / 1.95, 0, 1) * 1.95 + 0.05
+	if math.abs(newGrid - grid) > 0.001 then SetFloat("savegame.mod.combined.gravitycollapse_cache_grid", newGrid) end
+	UiPop()
+
+	UiTranslate(0, 0)
+	UiText("Cache TTL (s):")
+	UiTranslate(150, 0)
+	local ttl = GetFloat("savegame.mod.combined.gravitycollapse_cache_ttl")
+	UiText(string.format("%.2f", ttl))
+	UiTranslate(-150, 30)
+	UiPush()
+	UiTranslate(-100, 0)
+	local newTtl = UiSlider("dot", "x", (ttl - 0.1) / 9.9, 0, 1) * 9.9 + 0.1
+	if math.abs(newTtl - ttl) > 0.001 then SetFloat("savegame.mod.combined.gravitycollapse_cache_ttl", newTtl) end
+	UiPop()
+
+	UiTranslate(0, 0)
+	UiText("Invalidate Cache on Check:")
+	UiTranslate(150, 0)
+	local inv = GetBool("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check")
+	if inv then UiColor(0.5,1,0.5) else UiColor(0.7,0.7,0.7) end
+	if UiTextButton("Invalidate: " .. (inv and "ON" or "OFF"), 160, 28) then SetBool("savegame.mod.combined.gravitycollapse_cache_invalidate_on_check", not inv) end
+	UiColor(1,1,1)
+	UiTranslate(-150, 30)
+
+	UiTranslate(0, 0)
+	UiText("Profiler Overlay:")
+	UiTranslate(150, 0)
+	local prof = GetBool("savegame.mod.combined.gravitycollapse_profiler")
+	if prof then UiColor(0.5,1,0.5) else UiColor(0.7,0.7,0.7) end
+	if UiTextButton("Profiler: " .. (prof and "ON" or "OFF"), 160, 28) then SetBool("savegame.mod.combined.gravitycollapse_profiler", not prof) end
+	UiColor(1,1,1)
+	UiTranslate(-150, 30)
 
     -- Debris cleanup settings
     UiTranslate(0, 50)
